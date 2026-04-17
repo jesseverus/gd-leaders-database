@@ -16,9 +16,25 @@ const FTO_LEVEL_DISPLAY = {
 export function FTOTab({ftoOfficers,onUpsert,onRemove,search}){
 const[showAdd,setShowAdd]=useState(false);const[form,setForm]=useState({fullName:"",rank:"Senior Constable",division:"GD",ftoLevel:"FTO",isFTO:"Y",isSFTO:"N",isAcademyTrainer:"N",isInductionHost:"N",isSupervisor:"N",isLeader:"N"});
 const[active,setActive]=useState(null);const isA=(id,f)=>active?.id===id&&active?.f===f;const act=(id,f)=>setActive({id,f});const deact=()=>setActive(null);
+const[collapsedLevels,setCollapsedLevels]=useState({});
+const isLevelCollapsed=level=>collapsedLevels[level]??false;
+const toggleLevel=level=>setCollapsedLevels(p=>({...p,[level]:!isLevelCollapsed(level)}));
 const upd=k=>e=>setForm(p=>({...p,[k]:e.target.value}));
 const addOfficer=()=>{if(!form.fullName.trim())return;onUpsert({...form,id:genId(),fullName:form.fullName.trim()});setShowAdd(false);setForm({fullName:"",rank:"Senior Constable",division:"GD",ftoLevel:"FTO",isFTO:"Y",isSFTO:"N",isAcademyTrainer:"N",isInductionHost:"N",isSupervisor:"N",isLeader:"N"});};
 const del=id=>{if(window.confirm("Remove from FTO Database?"))onRemove(id);};
+// When a cert toggle changes, check if ALL of FTO/SFTO/Trainer/Induction are now N
+// (Supervisor and Leader are excluded per spec)
+const handleToggle=(o,k,v)=>{
+  const updated={...o,[k]:v};
+  const certFields=["isFTO","isSFTO","isAcademyTrainer","isInductionHost"];
+  const allN=certFields.every(f=>updated[f]==="N");
+  if(allN){
+    if(window.confirm(`All active certs cleared for ${o.fullName}. Remove from FTO Database?`)){
+      onRemove(o.id); return;
+    }
+  }
+  updF(o.id,k,v);
+};
 const updF=(id,f,v)=>{const o=ftoOfficers.find(x=>x.id===id);if(o)onUpsert({...o,[f]:v});};
 const sq=search.toLowerCase();
 const DIV_ORDER={'GD':0,'HWY':1,'CIRT':2};
@@ -57,20 +73,21 @@ return<div style={{padding:"10px 14px",overflowY:"auto",maxHeight:"calc(100vh - 
 </div>}
 {FTO_LEVELS.map(level=>{const grp=byLevel[level];if(!grp||grp.length===0)return null;const lm=FTO_LEVEL_DISPLAY[level]||{bg:"#374151",fg:"#d1d5db"};
 return<div key={level} style={{marginBottom:16}}>
-<div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px",background:"#040710",borderBottom:`1px solid ${T.borderMid}`,borderTop:`2px solid ${T.borderMid}`,marginBottom:4}}>
+<div onClick={()=>toggleLevel(level)} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px",background:"#040710",borderBottom:`1px solid ${T.borderMid}`,borderTop:`2px solid ${T.borderMid}`,marginBottom:4,cursor:"pointer",userSelect:"none"}}>
+<span style={{color:T.hint,fontSize:11}}>{isLevelCollapsed(level)?"▶":"▼"}</span>
 <span style={{background:lm.bg,color:lm.fg,borderRadius:3,padding:"2px 10px",fontSize:9,fontWeight:800,letterSpacing:"0.12em"}}>{level.toUpperCase()}</span>
 <span style={{color:T.muted,fontSize:9}}>{grp.length} officer{grp.length!==1?"s":""}</span>
 </div>
-<div style={{display:"flex",flexDirection:"column",gap:4}}>
+{!isLevelCollapsed(level)&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
 {grp.map(o=><div key={o.id} style={{background:TIER_ROW.silver.even,border:`1px solid ${T.border}`,borderRadius:6,padding:"8px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
 <div style={{width:36,height:36,background:RANK_META[o.rank]?.bg||"#374151",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{color:RANK_META[o.rank]?.fg||"#d1d5db",fontSize:10,fontWeight:800}}>{(o.fullName||"?").slice(0,2).toUpperCase()}</span></div>
 <div style={{flex:"0 0 180px",minWidth:0}}>{isA(o.id,"fn")?<input autoFocus value={o.fullName} onChange={e=>updF(o.id,"fullName",e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:13}}/>:<div onClick={()=>act(o.id,"fn")} style={{cursor:"pointer",color:T.text,fontWeight:700,fontSize:13}}>{o.fullName}</div>}<div style={{color:T.hint,fontSize:11}}>{o.division}</div></div>
 <div style={{flex:"0 0 190px"}}><select value={o.rank} onChange={e=>updF(o.id,"rank",e.target.value)} style={{...BASE_INP,padding:"2px 4px",fontSize:11}}>{RANKS.map(r=><option key={r}>{r}</option>)}</select></div>
 <div style={{flex:"0 0 160px"}}><select value={o.ftoLevel} onChange={e=>updF(o.id,"ftoLevel",e.target.value)} style={{...BASE_INP,padding:"2px 4px",fontSize:11}}>{FTO_LEVELS.map(l=><option key={l}>{l}</option>)}</select></div>
-<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>{FIELDS.map(([k,label])=><div key={k} style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:9,color:T.muted}}>{label}</span><Toggle val={o[k]||"N"} onChange={v=>updF(o.id,k,v)}/></div>)}</div>
+<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>{FIELDS.map(([k,label])=><div key={k} style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:9,color:T.muted}}>{label}</span><Toggle val={o[k]||"N"} onChange={v=>handleToggle(o,k,v)}/></div>)}</div>
 <button onClick={()=>del(o.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:13,lineHeight:1,marginLeft:"auto"}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color=T.muted}>✕</button>
 </div>)}
-</div></div>;})}
+</div>}</div>;})}
 {sorted.length===0&&<div style={{color:T.muted,textAlign:"center",padding:32,fontSize:13}}>No FTO officers match.</div>}
 </div>;}
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────

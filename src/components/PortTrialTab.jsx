@@ -50,9 +50,9 @@ export function PortTrialTab({portTrials,onUpsert,onRemove,search}){
     return { activeTrials, byYear, years };
   }, [portTrials, sq]);
 
-  const mostRecentYear = years[0] ?? '';
+  // All completed-year groups collapsed by default — only Active Trials section is always visible
   const [collapsed, setCollapsed] = useState({});
-  const isCollapsed = year => year in collapsed ? collapsed[year] : year !== mostRecentYear;
+  const isCollapsed = year => year in collapsed ? collapsed[year] : true;
   const toggleYear  = year => setCollapsed(p => ({...p, [year]: !isCollapsed(year)}));
 
   const TrialRow = ({t, index, showIndex=true}) => {

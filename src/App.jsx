@@ -18,6 +18,7 @@ import { melbToday, genId } from './lib/utils.js';
 
 const AUTH_PW  = import.meta.env.VITE_APP_PASSWORD ?? 'burnbook';
 const APP_NAME = 'GD Leaders Database';
+const SESSION_KEY = 'gdl_authed';
 
 const TABS = [
   { short: 'GD'          },
@@ -29,7 +30,7 @@ const TABS = [
 ];
 
 export default function App() {
-  const [loggedIn,  setLoggedIn]  = useState(false);
+  const [loggedIn,  setLoggedIn]  = useState(() => sessionStorage.getItem(SESSION_KEY) === '1');
   const [tab,       setTab]       = useState(0);
   const [search,    setSearch]    = useState('');
   const [showAddO,  setShowAddO]  = useState(false);
@@ -115,6 +116,28 @@ export default function App() {
     }
   }, [removeO, removeFTO, officers, ftoOfficers]);
 
+  // Terminate an officer — adds termination record, removes from GD, FTO DB, and PORT CS
+  const handleTerminate = useCallback((o, type, reason) => {
+    // Add termination record
+    upsertTm({
+      id: genId(), steamName: o.steamName, fullName: o.fullName,
+      callsign: o.callsign, rank: o.rank,
+      type, reason, termDate: melbToday(),
+      year: new Date().getFullYear().toString(),
+    });
+    // Remove from GD (triggers FTO removal via handleRemoveOfficer)
+    handleRemoveOfficer(o.id);
+    // Remove any PORT callsign assignment
+    portCS.forEach(s => {
+      if (s.officer && s.officer.trim().toLowerCase() === (o.fullName||'').trim().toLowerCase()) {
+        onUpsert_CS({...s, officer:''});
+      }
+    });
+  }, [upsertTm, handleRemoveOfficer, portCS]);
+
+  // Expose upsertCS under a stable name for handleTerminate
+  const onUpsert_CS = useCallback((s) => upsertCS(s), [upsertCS]);
+
   // Transfer an officer from GD tab (adds transfer record, optionally removes from GD)
   const handleTransfer = useCallback((o) => {
     const reason = window.prompt(`Moving "${o.fullName || o.steamName}" — enter destination/reason (cancel to abort):`);
@@ -188,7 +211,7 @@ export default function App() {
     accent:'#3b82f6',text:'#d8e4f0',muted:'#3d526e',hint:'#5a7a9a',
   };
 
-  if (!loggedIn) return <LoginScreen onLogin={() => setLoggedIn(true)} authPw={AUTH_PW} appName={APP_NAME}/>;
+  if (!loggedIn) return <LoginScreen onLogin={() => { sessionStorage.setItem(SESSION_KEY,'1'); setLoggedIn(true); }} authPw={AUTH_PW} appName={APP_NAME}/>;
   if (!ready)    return (
     <div style={{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',color:T.hint,fontSize:14}}>
       Connecting to database…
@@ -232,7 +255,7 @@ export default function App() {
             <span style={{color:T.borderMid}}>|</span>
             <span>FTO: <strong style={{color:'#a78bfa'}}>{ftoOfficers.length}</strong></span>
           </div>
-          <button onClick={() => setLoggedIn(false)}
+          <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
             style={{background:'none',border:'none',cursor:'pointer',color:T.muted,fontSize:11,marginLeft:'auto',flexShrink:0}}>
             Logout
           </button>
@@ -270,7 +293,7 @@ export default function App() {
         {tab === 0 && <GDTable officers={officers} certs={sortedCerts}
           onUpsertOfficer={handleUpsertOfficer} onRemoveOfficer={handleRemoveOfficer}
           onUpsertCert={upsertC} onRemoveCert={removeC}
-          search={search} onTransfer={handleTransfer}/>}
+          search={search} onTransfer={handleTransfer} onTerminate={handleTerminate}/>}
         {tab === 1 && <TransfersTab transfers={transfers} onUpsert={upsertT} onRemove={removeT} search={search}/>}
         {tab === 2 && <TerminationsTab terminations={terminations} onUpsert={upsertTm} onRemove={removeTm} search={search}/>}
         {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={upsertPT} onRemove={removePT} search={search}/>}
