@@ -38,7 +38,7 @@ export default function App() {
   const [showAddC,  setShowAddC]  = useState(false);
   const [archiveModal, setArchiveModal] = useState(null); // { ftoRecord } | null
   const [archiveReason, setArchiveReason] = useState('');
-  const { changes, dismiss } = useRealtimeChanges();
+  const { changes, dismiss, dismissOne } = useRealtimeChanges();
   const importRef = useRef(null);
 
   const [officers,      {upsert: upsertO, upsertMany: upsertManyO, remove: removeO},           oR] = useDb('officers');
@@ -261,56 +261,56 @@ export default function App() {
   return (
     <div style={{minHeight:'100vh',background:T.bg,fontFamily:'system-ui,-apple-system,sans-serif',color:T.text,display:'flex',flexDirection:'column'}}>
 
-      {/* ── REALTIME CHANGE NOTIFICATIONS ── */}
+      {/* ── REALTIME CHANGE NOTIFICATIONS — toast stack ── */}
       {changes.length > 0 && (
         <div style={{position:'fixed',bottom:20,right:20,zIndex:9000,
-          display:'flex',flexDirection:'column',gap:6,maxWidth:380,width:'calc(100vw - 40px)'}}>
-          <div style={{background:'#0f1a2e',border:'1px solid #2d4a7a',borderRadius:10,
-            boxShadow:'0 4px 24px rgba(0,0,0,0.7)',overflow:'hidden'}}>
-            <div style={{padding:'10px 14px',borderBottom:'1px solid #17243a',
-              display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <div style={{width:8,height:8,borderRadius:'50%',background:'#3b82f6',
-                  boxShadow:'0 0 6px #3b82f6',flexShrink:0}}/>
-                <span style={{color:'#d8e4f0',fontSize:12,fontWeight:700}}>
-                  {changes.length} change{changes.length!==1?'s':''} made by another user
+          display:'flex',flexDirection:'column',gap:8,maxWidth:360,width:'calc(100vw - 40px)',
+          pointerEvents:'none'}}>
+          {changes.map(c => (
+            <div key={c.key} style={{background:'#0f1a2e',border:'1px solid #2d4a7a',
+              borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',overflow:'hidden',
+              pointerEvents:'all',animation:'gdl-slide-in 0.2s ease'}}>
+              <div style={{padding:'8px 12px',display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:7,height:7,borderRadius:'50%',background:'#3b82f6',
+                  boxShadow:'0 0 5px #3b82f6',flexShrink:0}}/>
+                <span style={{background:'#1e3050',color:'#93c5fd',borderRadius:3,
+                  padding:'1px 5px',fontSize:9,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>
+                  {c.tableLabel}
                 </span>
+                <span style={{color:'#d8e4f0',fontSize:12,flex:1,overflow:'hidden',
+                  textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label}</span>
+                <span style={{color:'#5a7a9a',fontSize:10,flexShrink:0,marginRight:4}}>{c.event}</span>
+                <button onClick={()=>dismissOne(c.key)}
+                  style={{background:'none',border:'none',color:'#3d526e',fontSize:14,
+                    cursor:'pointer',lineHeight:1,flexShrink:0,padding:0}}>×</button>
               </div>
-              <button onClick={dismiss}
-                style={{background:'none',border:'none',color:'#3d526e',fontSize:16,
-                  cursor:'pointer',lineHeight:1,padding:'0 4px'}}>×</button>
+              <div style={{padding:'0 12px 8px',display:'flex',alignItems:'center',gap:8}}>
+                <span style={{color:'#3d526e',fontSize:10,flexShrink:0}}>{c.time}</span>
+                <button onClick={()=>{dismiss();window.location.reload();}}
+                  style={{background:'none',border:'none',color:'#3b82f6',fontSize:10,
+                    cursor:'pointer',padding:0,textDecoration:'underline',flexShrink:0}}>
+                  Reload to see changes
+                </button>
+              </div>
+              {/* Progress bar showing time until auto-dismiss */}
+              <div style={{height:2,background:'#17243a'}}>
+                <div style={{height:'100%',background:'#3b82f6',
+                  animation:'gdl-progress 6s linear forwards'}}/>
+              </div>
             </div>
-            <div style={{maxHeight:200,overflowY:'auto'}}>
-              {changes.map(c => (
-                <div key={c.key} style={{padding:'7px 14px',borderBottom:'1px solid #0d1729',
-                  display:'flex',alignItems:'baseline',gap:8}}>
-                  <span style={{background:'#1e3050',color:'#93c5fd',borderRadius:3,
-                    padding:'1px 6px',fontSize:9,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>
-                    {c.tableLabel}
-                  </span>
-                  <span style={{color:'#d8e4f0',fontSize:12,flex:1,overflow:'hidden',
-                    textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                    {c.label}
-                  </span>
-                  <span style={{color:'#5a7a9a',fontSize:10,flexShrink:0}}>{c.event}</span>
-                  <span style={{color:'#3d526e',fontSize:9,flexShrink:0}}>{c.time}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{padding:'8px 14px',display:'flex',justifyContent:'flex-end',gap:8,
-              borderTop:'1px solid #17243a'}}>
-              <button onClick={dismiss}
-                style={{background:'none',border:'1px solid #17243a',borderRadius:5,
-                  color:'#5a7a9a',fontSize:11,padding:'4px 12px',cursor:'pointer'}}>Dismiss</button>
-              <button onClick={()=>{dismiss();window.location.reload();}}
-                style={{background:'#1e3a8a',border:'none',borderRadius:5,
-                  color:'#bfdbfe',fontSize:11,padding:'4px 14px',cursor:'pointer',fontWeight:700}}>
-                Reload to see changes
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
       )}
+      <style>{`
+        @keyframes gdl-slide-in {
+          from { opacity:0; transform:translateX(20px); }
+          to   { opacity:1; transform:translateX(0); }
+        }
+        @keyframes gdl-progress {
+          from { width:100%; }
+          to   { width:0%; }
+        }
+      `}</style>
 
       {/* ── HEADER ── */}
       <div style={{position:'sticky',top:0,zIndex:500,background:T.nav,borderBottom:`1px solid ${T.border}`}}>

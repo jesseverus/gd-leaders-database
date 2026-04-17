@@ -1,13 +1,16 @@
 // src/hooks/useRealtimeChanges.js
 // Subscribes to real-time changes on all GDL tables via Supabase Realtime.
-// Ignores changes made by the current browser session (MY_SESSION_ID).
-// Returns a list of pending change notifications and a dismiss/reload function.
+// - Debounces per-record: if the same record is updated multiple times within
+//   DEBOUNCE_MS, only one notification fires (last write wins).
+// - Auto-dismisses each notification after AUTO_DISMISS_MS.
+// - Ignores changes made by the current browser session.
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 
-// A random ID stamped on every write so we can ignore our own changes.
-// Stored in sessionStorage so it persists across re-renders but resets on new tabs.
+const DEBOUNCE_MS     = 2500; // wait this long after last change before notifying
+const AUTO_DISMISS_MS = 6000; // each notification disappears after this long
+
 const getSessionId = () => {
   let id = sessionStorage.getItem('gdl_session_id');
   if (!id) {
@@ -18,7 +21,6 @@ const getSessionId = () => {
 };
 export const MY_SESSION_ID = getSessionId();
 
-// Human-readable table labels
 const TABLE_LABELS = {
   gd_officers:       'GD Roster',
   gd_certs:          'Certifications',
@@ -28,10 +30,8 @@ const TABLE_LABELS = {
   gd_port_callsigns: 'PORT Callsigns',
   gd_fto_officers:   'FTO Database',
 };
-
 const ALL_TABLES = Object.keys(TABLE_LABELS);
 
-// Best-effort human name from a raw DB row
 function rowLabel(table, row) {
   if (!row) return '';
   if (table === 'gd_officers')       return row.full_name || row.steam_name || '';
@@ -44,66 +44,82 @@ function rowLabel(table, row) {
 }
 
 export function useRealtimeChanges() {
-  const [changes, setChanges] = useState([]); // list of { id, table, event, label, time }
-  const channelRef = useRef(null);
+  const [changes, setChanges]   = useState([]);
+  const debounceTimers          = useRef({});
+  const dismissTimers           = useRef({});
+  const recentWrites            = useRef(new Set());
+
+  const scheduleDismiss = useCallback((key) => {
+    clearTimeout(dismissTimers.current[key]);
+    dismissTimers.current[key] = setTimeout(() => {
+      setChanges(prev => prev.filter(c => c.key !== key));
+      delete dismissTimers.current[key];
+    }, AUTO_DISMISS_MS);
+  }, []);
 
   useEffect(() => {
-    // Subscribe to all tables via a single Postgres Changes channel
     const channel = supabase.channel('gdl_realtime_all');
 
     ALL_TABLES.forEach(table => {
-      channel.on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table },
-        (payload) => {
-          // Ignore our own writes (stamped via session_id column not present — 
-          // we use a lightweight approach: ignore changes that happen within
-          // 2 seconds of a local write to the same record id)
-          const row  = payload.new || payload.old;
-          const id   = row?.id;
-          const event = payload.eventType; // INSERT | UPDATE | DELETE
+      channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
+        const row        = payload.new || payload.old;
+        const id         = row?.id;
+        const eventType  = payload.eventType;
 
-          // Check if this id was recently written by us
-          if (id && recentWrites.current.has(id)) return;
+        if (id && recentWrites.current.has(id)) return;
 
-          const label = rowLabel(table, row);
-          const eventWord = event === 'INSERT' ? 'added' : event === 'DELETE' ? 'removed' : 'updated';
+        const debounceKey = `${table}_${id}`;
+        clearTimeout(debounceTimers.current[debounceKey]);
+
+        debounceTimers.current[debounceKey] = setTimeout(() => {
+          delete debounceTimers.current[debounceKey];
+
+          const label     = rowLabel(table, row);
+          const eventWord = eventType === 'INSERT' ? 'added'
+                          : eventType === 'DELETE' ? 'removed' : 'updated';
+          const key       = `${debounceKey}_${Date.now()}`;
 
           setChanges(prev => {
-            // Deduplicate — if same id+table already pending, update it
-            const without = prev.filter(c => !(c.id === id && c.table === table));
+            const without = prev.filter(c => c.recordKey !== debounceKey);
             return [...without, {
-              key:   `${table}_${id}_${Date.now()}`,
-              table,
+              key, recordKey: debounceKey, table,
               tableLabel: TABLE_LABELS[table] || table,
               event: eventWord,
               label: label || 'a record',
-              time:  new Date().toLocaleTimeString('en-AU', { hour:'2-digit', minute:'2-digit' }),
-            }].slice(-20); // cap at 20 pending notifications
+              time: new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+            }].slice(-10);
           });
-        }
-      );
+
+          scheduleDismiss(key);
+        }, DEBOUNCE_MS);
+      });
     });
 
     channel.subscribe();
-    channelRef.current = channel;
-
     return () => {
+      Object.values(debounceTimers.current).forEach(clearTimeout);
+      Object.values(dismissTimers.current).forEach(clearTimeout);
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  // Track recent local writes so we can suppress self-notifications
-  const recentWrites = useRef(new Set());
+  }, [scheduleDismiss]);
 
   const markWritten = useCallback((id) => {
     if (!id) return;
     recentWrites.current.add(id);
-    // Remove after 3 seconds — enough time for the realtime event to arrive
-    setTimeout(() => recentWrites.current.delete(id), 3000);
+    setTimeout(() => recentWrites.current.delete(id), DEBOUNCE_MS + 500);
   }, []);
 
-  const dismiss = useCallback(() => setChanges([]), []);
+  const dismiss = useCallback(() => {
+    Object.values(dismissTimers.current).forEach(clearTimeout);
+    dismissTimers.current = {};
+    setChanges([]);
+  }, []);
 
-  return { changes, markWritten, dismiss };
+  const dismissOne = useCallback((key) => {
+    clearTimeout(dismissTimers.current[key]);
+    delete dismissTimers.current[key];
+    setChanges(prev => prev.filter(c => c.key !== key));
+  }, []);
+
+  return { changes, markWritten, dismiss, dismissOne };
 }
