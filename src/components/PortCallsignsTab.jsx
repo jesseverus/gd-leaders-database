@@ -23,7 +23,7 @@ export function PortCallsignsTab({portCS, onUpsert, onRemove, search}){
   const [newSlot,   setNewSlot]   = useState({number:'',officer:''});
   // Section collapse state — all start expanded
   const [collapsed, setCollapsed] = useState({});
-  const isCollapsed = key => collapsed[key] ?? false;
+  const isCollapsed = key => collapsed[key] ?? true;
   const toggle      = key => setCollapsed(p=>({...p,[key]:!isCollapsed(key)}));
 
   const sq = search.toLowerCase();

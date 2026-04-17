@@ -157,7 +157,19 @@ return<div key={level} style={{marginBottom:16}}>
 ?<input autoFocus value={o.notes||""} onChange={e=>onUpsert({...o,notes:e.target.value})} onBlur={()=>setPrevNoteEdit(null)} style={{...BASE_INP,fontSize:12,background:"#060d1a"}}/>
 :<div onClick={()=>setPrevNoteEdit(o.id)} style={{cursor:"pointer",color:o.notes?"#9ca3af":T.muted,fontSize:12,fontStyle:o.notes?"normal":"italic"}}>{o.notes||"Click to add notes…"}</div>}
 </div>
-<button onClick={()=>{if(window.confirm(`Permanently delete ${o.fullName} from Previous FTO?`))onRemove(o.id);}} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:12,lineHeight:1,marginLeft:"auto"}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color=T.muted}>✕</button>
+<div style={{display:"flex",gap:6,alignItems:"center",marginLeft:"auto"}}>
+<button onClick={()=>{
+  if(onCheckAndAdd){
+    onCheckAndAdd({...o,isPrevious:"N",removedDate:"",notes:o.notes});
+  } else {
+    onUpsert({...o,isPrevious:"N",removedDate:""});
+  }
+}} style={{background:"#14532d",border:"none",borderRadius:4,cursor:"pointer",
+  color:"#bbf7d0",fontSize:10,padding:"3px 10px",fontWeight:700,lineHeight:1.4}}
+onMouseEnter={e=>e.currentTarget.style.background="#166534"}
+onMouseLeave={e=>e.currentTarget.style.background="#14532d"}>Reinstate</button>
+<button onClick={()=>{if(window.confirm(`Permanently delete ${o.fullName} from Previous FTO?`))onRemove(o.id);}} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:12,lineHeight:1}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color=T.muted}>✕</button>
+</div>
 </div></div>
 ))}
 </div>}
