@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { T, Btn, FRow, FINP, FSEL } from './ui.jsx';
 import { RANKS, RANK_ORDER, RANK_META, TIER_ROW, FTO_LEVELS, FTO_DIV, BASE_INP, genId } from '../lib/utils.js';
 
+const DIV_LABELS={'GD':'General Duties','HWY':'Highway Patrol','CIRT':'Critical Incident Response Team','Special':'Special Constable'};
 const FTO_LEVEL_DISPLAY = {
   "FTO Senior Leadership/Command": { bg:"#78350f", fg:"#fef9c3" },
   "FTO Leader":                    { bg:"#1e3a8a", fg:"#bfdbfe" },
@@ -26,6 +27,8 @@ const upd=k=>e=>{
   let patch={[k]:v};
   if(k==="rank"&&LEADERSHIP_RANKS_FTO.has(v)){patch={...patch,isFTO:"Y",isSFTO:"Y"};}
   if(k==="ftoLevel"&&SFTO_LEVELS_SET.has(v)){patch={...patch,isFTO:"Y",isSFTO:"Y"};}
+  if(k==="rank"&&v==="Special Constable"){patch={...patch,division:"Special"};}
+  if(k==="rank"&&v!=="Special Constable"&&(form.division==="Special")){patch={...patch,division:"GD"};}
   setForm(p=>({...p,...patch}));
 };
 const addOfficer=()=>{
@@ -56,11 +59,13 @@ const updF=(id,f,v)=>{
   if(!o)return;
   let updated={...o,[f]:v};
   if(f==="rank"&&LEADERSHIP_RANKS_FTO.has(v)){updated={...updated,isFTO:"Y",isSFTO:"Y"};}
+  if(f==="rank"&&v==="Special Constable"){updated={...updated,division:"Special"};}
+  if(f==="rank"&&v!=="Special Constable"&&updated.division==="Special"){updated={...updated,division:"GD"};}
   if(f==="ftoLevel"&&SFTO_LEVELS_SET.has(v)){updated={...updated,isFTO:"Y",isSFTO:"Y"};}
   onUpsert(updated);
 };
 const sq=search.toLowerCase();
-const DIV_ORDER={'GD':0,'HWY':1,'CIRT':2};
+const DIV_ORDER={'GD':0,'HWY':1,'CIRT':2,'Special':3};
 const sorted=[...ftoOfficers]
   .filter(o=>!sq||[o.fullName,o.rank,o.division,o.ftoLevel].some(v=>(v||"").toLowerCase().includes(sq)))
   .sort((a,b)=>{
@@ -93,7 +98,7 @@ return<div style={{padding:"10px 14px",overflowY:"auto",maxHeight:"calc(100vh - 
 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:10}}>
 <FRow label="Full Name"><input style={FINP} value={form.fullName} onChange={upd("fullName")} autoFocus/></FRow>
 <FRow label="Rank"><select style={FSEL} value={form.rank} onChange={upd("rank")}>{RANKS.map(r=><option key={r}>{r}</option>)}</select></FRow>
-<FRow label="Division"><select style={FSEL} value={form.division} onChange={upd("division")}>{FTO_DIV.map(d=><option key={d}>{d}</option>)}</select></FRow>
+<FRow label="Division"><select style={FSEL} value={form.division} onChange={upd("division")}>{FTO_DIV.map(d=><option key={d} value={d}>{DIV_LABELS[d]||d}</option>)}</select></FRow>
 <FRow label="FTO Level"><select style={FSEL} value={form.ftoLevel} onChange={upd("ftoLevel")}>{FTO_LEVELS.map(l=><option key={l}>{l}</option>)}</select></FRow>
 </div>
 <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:10}}>{FIELDS.map(([k,label])=><div key={k} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:11,color:T.hint}}>{label}</span><Toggle val={form[k]} onChange={v=>setForm(p=>({...p,[k]:v}))}/></div>)}</div>
@@ -109,7 +114,10 @@ return<div key={level} style={{marginBottom:16}}>
 {!isLevelCollapsed(level)&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
 {grp.map(o=><div key={o.id} style={{background:TIER_ROW.silver.even,border:`1px solid ${T.border}`,borderRadius:6,padding:"8px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
 <div style={{width:36,height:36,background:RANK_META[o.rank]?.bg||"#374151",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{color:RANK_META[o.rank]?.fg||"#d1d5db",fontSize:10,fontWeight:800}}>{(o.fullName||"?").slice(0,2).toUpperCase()}</span></div>
-<div style={{flex:"0 0 180px",minWidth:0}}>{isA(o.id,"fn")?<input autoFocus value={o.fullName} onChange={e=>updF(o.id,"fullName",e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:13}}/>:<div onClick={()=>act(o.id,"fn")} style={{cursor:"pointer",color:T.text,fontWeight:700,fontSize:13}}>{o.fullName}</div>}<div style={{color:T.hint,fontSize:11}}>{o.division}</div></div>
+<div style={{flex:"0 0 180px",minWidth:0}}>{isA(o.id,"fn")?<input autoFocus value={o.fullName} onChange={e=>updF(o.id,"fullName",e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:13}}/>:<div onClick={()=>act(o.id,"fn")} style={{cursor:"pointer",color:T.text,fontWeight:700,fontSize:13}}>{o.fullName}</div>}<select value={o.division||"GD"} onChange={e=>updF(o.id,"division",e.target.value)}
+  style={{background:"transparent",border:"none",borderBottom:`1px solid ${T.border}`,color:T.hint,fontSize:11,cursor:"pointer",padding:"1px 0",outline:"none",width:"100%",marginTop:2}}>
+  {FTO_DIV.map(d=><option key={d} value={d}>{DIV_LABELS[d]||d}</option>)}
+</select></div>
 <div style={{flex:"0 0 190px"}}><select value={o.rank} onChange={e=>updF(o.id,"rank",e.target.value)} style={{...BASE_INP,padding:"2px 4px",fontSize:11}}>{RANKS.map(r=><option key={r}>{r}</option>)}</select></div>
 <div style={{flex:"0 0 160px"}}><select value={o.ftoLevel} onChange={e=>updF(o.id,"ftoLevel",e.target.value)} style={{...BASE_INP,padding:"2px 4px",fontSize:11}}>{FTO_LEVELS.map(l=><option key={l}>{l}</option>)}</select></div>
 <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>{FIELDS.map(([k,label])=><div key={k} style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:9,color:T.muted}}>{label}</span><Toggle val={o[k]||"N"} onChange={v=>handleToggle(o,k,v)}/></div>)}</div>

@@ -87,7 +87,7 @@ export const BOOL_OPTS = [
 export const FTO_LEVELS = [
   'FTO Senior Leadership/Command','FTO Leader','FTO Supervisor','Senior FTO','FTO'
 ];
-export const FTO_DIV = ['Leadership','GD','HWY','CIRT','N/A'];
+export const FTO_DIV = ['GD','HWY','CIRT','Special'];
 
 export const T = {
   bg:'#07090f', nav:'#0b0f1a', card:'#0f1525',

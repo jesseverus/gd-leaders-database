@@ -35,6 +35,8 @@ export default function App() {
   const [search,    setSearch]    = useState('');
   const [showAddO,  setShowAddO]  = useState(false);
   const [showAddC,  setShowAddC]  = useState(false);
+  const [archiveModal, setArchiveModal] = useState(null); // { ftoRecord } | null
+  const [archiveReason, setArchiveReason] = useState('');
   const importRef = useRef(null);
 
   const [officers,      {upsert: upsertO, upsertMany: upsertManyO, remove: removeO},           oR] = useDb('officers');
@@ -60,14 +62,24 @@ export default function App() {
     return 'FTO';
   };
 
-  // Archive an active FTO record to "Previous FTO" instead of deleting
+  // Archive an active FTO record to "Previous FTO" — opens modal to collect reason
   const archiveFTO = useCallback((existingFTO) => {
+    setArchiveReason('');
+    setArchiveModal(existingFTO);
+  }, []);
+
+  // Called when user confirms the archive modal
+  const confirmArchive = useCallback(() => {
+    if (!archiveModal) return;
     upsertFTO({
-      ...existingFTO,
+      ...archiveModal,
       isPrevious:  'Y',
       removedDate: melbToday(),
+      notes: archiveReason.trim(),
     });
-  }, [upsertFTO]);
+    setArchiveModal(null);
+    setArchiveReason('');
+  }, [archiveModal, archiveReason, upsertFTO]);
 
   // Check for a previous FTO record and ask before overwriting
   const checkAndAddFTO = useCallback((newRecord) => {
@@ -105,7 +117,8 @@ export default function App() {
       checkAndAddFTO({
         id: genId(), gdOfficerId: updated.id,
         fullName: updated.fullName, rank: updated.rank,
-        division: 'GD', ftoLevel: ftoLevelFromCert(newFtoCert),
+        division: updated.rank === 'Special Constable' ? 'Special' : 'GD',
+        ftoLevel: ftoLevelFromCert(newFtoCert),
         isFTO: 'Y',
         isSFTO: (newFtoCert === 'SFTO' || newFtoCert === 'TL' || newFtoCert === '2IC') ? 'Y' : 'N',
         isAcademyTrainer: 'N', isInductionHost: 'N', isSupervisor: 'N', isLeader: 'N',
