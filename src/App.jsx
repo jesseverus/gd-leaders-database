@@ -16,6 +16,8 @@ import { AddCertModal }     from './components/modals/AddCertModal.jsx';
 import { Btn }              from './components/ui.jsx';
 import { melbToday, genId } from './lib/utils.js';
 import { useRealtimeChanges } from './hooks/useRealtimeChanges.js';
+import { useAuditLog }        from './hooks/useAuditLog.js';
+import { AuditLogTab }        from './components/AuditLogTab.jsx';
 
 const AUTH_PW  = import.meta.env.VITE_APP_PASSWORD ?? 'burnbook';
 const APP_NAME = 'GD Leaders Database';
@@ -28,6 +30,7 @@ const TABS = [
   { short: 'PORT Trials' },
   { short: 'PORT CS'     },
   { short: 'FTO DB'      },
+  { short: 'Audit Log'   },
 ];
 
 export default function App() {
@@ -39,6 +42,7 @@ export default function App() {
   const [archiveModal, setArchiveModal] = useState(null); // { ftoRecord } | null
   const [archiveReason, setArchiveReason] = useState('');
   const { changes, dismiss, dismissOne } = useRealtimeChanges();
+  const { log: audit } = useAuditLog();
   const importRef = useRef(null);
 
   const [officers,      {upsert: upsertO, upsertMany: upsertManyO, remove: removeO},           oR] = useDb('officers');
@@ -73,6 +77,8 @@ export default function App() {
   // Called when user confirms the archive modal
   const confirmArchive = useCallback(() => {
     if (!archiveModal) return;
+    audit({ action:'FTO_ARCHIVE', subject: archiveModal.fullName,
+      detail: archiveReason.trim() || 'Moved to Previous FTO', tab:'FTO DB' });
     upsertFTO({
       ...archiveModal,
       isPrevious:  'Y',
@@ -102,8 +108,13 @@ export default function App() {
 
   // Wrapped officer upsert — syncs FTO cert grants/removals and rank changes into FTO DB
   const handleUpsertOfficer = useCallback((updated) => {
+    const isNew = !officers.find(o => o.id === updated.id);
     upsertO(updated);
-    const prev        = officers.find(o => o.id === updated.id);
+    const prev = officers.find(o => o.id === updated.id);
+    if (isNew) {
+      audit({ action:'OFFICER_ADD', subject: updated.fullName||updated.steamName,
+        detail:`Added to GD roster · Rank: ${updated.rank}`, tab:'GD' });
+    }
 
     // ── Cross-tab name sync ──────────────────────────────────────────
     // If the officer's full name changed, propagate it to PORT Trials and PORT CS
@@ -125,6 +136,17 @@ export default function App() {
     }
     // ────────────────────────────────────────────────────────────────
 
+    // Audit: rank change
+    if (prev && prev.rank !== updated.rank) {
+      audit({ action:'RANK_CHANGE', subject: updated.fullName||updated.steamName,
+        detail:`Rank changed`, tab:'GD', prevValue: prev.rank, newValue: updated.rank });
+    }
+    // Audit: name change
+    if (prev && prevName && newName && prevName !== newName) {
+      audit({ action:'NAME_CHANGE', subject: newName,
+        detail:`Name updated`, tab:'GD', prevValue: prevName, newValue: newName });
+    }
+    // Audit: cert changes (FTO cert specifically)
     const prevFtoCert = prev?.certValues?.fto ?? '';
     const newFtoCert  = updated.certValues?.fto ?? '';
     const hadFTO      = FTO_ACTIVE.has(prevFtoCert);
@@ -137,6 +159,8 @@ export default function App() {
 
     if (hasFTO && !existingFTO) {
       // FTO cert granted — check for previous record first
+      audit({ action:'FTO_ADD', subject: updated.fullName||updated.steamName,
+        detail:`FTO cert granted (${newFtoCert})`, tab:'FTO DB' });
       checkAndAddFTO({
         id: genId(), gdOfficerId: updated.id,
         fullName: updated.fullName, rank: updated.rank,
@@ -149,6 +173,8 @@ export default function App() {
       });
     } else if (!hasFTO && hadFTO && existingFTO) {
       // FTO cert removed — archive rather than delete
+      audit({ action:'FTO_ARCHIVE', subject: updated.fullName||updated.steamName,
+        detail:`FTO cert removed, moved to Previous FTO`, tab:'FTO DB' });
       archiveFTO(existingFTO);
     } else if (hasFTO && existingFTO) {
       // Already in FTO DB — sync name, rank and/or level if anything changed
@@ -171,6 +197,8 @@ export default function App() {
   // Wrapped officer remove — archives FTO record instead of deleting
   const handleRemoveOfficer = useCallback((id) => {
     const o = officers.find(x => x.id === id);
+    if (o) audit({ action:'OFFICER_REMOVE', subject: o.fullName||o.steamName,
+      detail:`Removed from GD roster`, tab:'GD' });
     removeO(id);
     if (o) {
       const existingFTO = ftoOfficers.find(f => f.isPrevious !== 'Y' && f.gdOfficerId === id)
@@ -183,6 +211,9 @@ export default function App() {
   const handleTerminate = useCallback((o, type, reason) => {
     const now = melbToday();
     const year = new Date().getFullYear().toString();
+    audit({ action: type === 'Terminated' ? 'TERMINATE' : 'RESIGN',
+      subject: o.fullName||o.steamName,
+      detail: reason, tab:'GD', prevValue: o.rank });
     // Add termination record
     upsertTm({
       id: genId(), steamName: o.steamName, fullName: o.fullName,
@@ -204,6 +235,8 @@ export default function App() {
     const reason = window.prompt(`Moving "${o.fullName || o.steamName}" — enter destination/reason (cancel to abort):`);
     if (reason === null) return;
     const div = (window.prompt('Division transferred to (CIRT / HWY / blank):') ?? '').trim().toUpperCase();
+    audit({ action:'TRANSFER', subject: o.fullName||o.steamName,
+      detail: reason.trim(), tab:'GD', newValue: div||'GD' });
     upsertT({
       id: genId(), steamName: o.steamName, fullName: o.fullName,
       callsign: o.callsign, rank: o.rank, promoDate: o.lastPromotionDate,
@@ -305,6 +338,7 @@ export default function App() {
       3: portTrials.filter(t => [t.name,t.rank].some(v=>(v||'').toLowerCase().includes(sq))).length,
       4: portCS.filter(s => (s.officer||'').toLowerCase().includes(sq)).length,
       5: ftoOfficers.filter(o=> [o.fullName,o.rank,o.division].some(v=>(v||'').toLowerCase().includes(sq))).length,
+      6: 0,
     };
   }, [sq, officers, transfers, terminations, portTrials, portCS, ftoOfficers]);
 
@@ -459,6 +493,7 @@ export default function App() {
         {tab === 2 && <TerminationsTab terminations={terminations} onUpsert={upsertTm} onRemove={removeTm} search={search}/>}
         {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={handleUpsertPT} onRemove={removePT} search={search}/>}
         {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={handleUpsertCS} onRemove={removeCS} search={search}/>}
+        {tab === 6 && <AuditLogTab search={search}/>}
         {tab === 5 && <FTOTab ftoOfficers={ftoOfficers} onUpsert={upsertFTO}
           onRemove={id=>{const f=ftoOfficers.find(x=>x.id===id);if(f&&f.isPrevious!=='Y')archiveFTO(f);else removeFTO(id);}}
           onCheckAndAdd={checkAndAddFTO}
