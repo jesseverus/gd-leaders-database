@@ -348,6 +348,47 @@ export default function App() {
       {showAddC && <AddCertModal
         onClose={() => setShowAddC(false)}
         onAdd={c => { const mo = Math.max(...certs.map(x => x.order || 0), 0); upsertC({...c, order: mo+1}); setShowAddC(false); }}/>}
+
+      {archiveModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.82)',zIndex:10000,
+          display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+          onClick={()=>setArchiveModal(null)}>
+          <div style={{background:'#0f1a2e',border:'1px solid #1e3050',borderRadius:10,
+            width:'100%',maxWidth:420,overflow:'hidden'}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{padding:'12px 16px',borderBottom:'1px solid #17243a',
+              display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <div style={{color:'#d8e4f0',fontWeight:700,fontSize:14}}>Move to Previous FTO</div>
+                <div style={{color:'#5a7a9a',fontSize:11}}>{archiveModal.fullName} &middot; {archiveModal.rank}</div>
+              </div>
+              <button onClick={()=>setArchiveModal(null)}
+                style={{background:'none',border:'none',color:'#3d526e',fontSize:20,cursor:'pointer',lineHeight:1}}>x</button>
+            </div>
+            <div style={{padding:16}}>
+              <div style={{fontSize:11,color:'#5a7a9a',marginBottom:12,lineHeight:1.6}}>
+                This officer will be moved to <strong style={{color:'#d8e4f0'}}>Previous FTO</strong>. Their record will be kept for reference.
+              </div>
+              <label style={{display:'block',color:'#5a7a9a',fontSize:10,fontWeight:700,
+                textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>Reason (optional)</label>
+              <textarea value={archiveReason} onChange={e=>setArchiveReason(e.target.value)}
+                autoFocus rows={3}
+                placeholder='e.g. Left the division, cert expired, rank change...'
+                style={{width:'100%',background:'#060d1a',border:'1px solid #1e3050',
+                  borderRadius:4,color:'#d8e4f0',padding:'6px 8px',fontSize:12,
+                  resize:'vertical',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+              <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:12}}>
+                <button onClick={()=>setArchiveModal(null)}
+                  style={{background:'none',border:'1px solid #17243a',borderRadius:5,
+                    color:'#5a7a9a',fontSize:11,padding:'6px 14px',cursor:'pointer'}}>Cancel</button>
+                <button onClick={confirmArchive}
+                  style={{background:'#374151',border:'none',borderRadius:5,
+                    color:'#d1d5db',fontSize:11,padding:'6px 16px',cursor:'pointer',fontWeight:700}}>Move to Previous FTO</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

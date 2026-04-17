@@ -46,9 +46,8 @@ const handleToggle=(o,k,v)=>{
   const certFields=["isFTO","isSFTO","isAcademyTrainer","isInductionHost"];
   const allN=certFields.every(f=>updated[f]==="N");
   if(allN){
-    if(window.confirm(`All active certs cleared for ${o.fullName}.\nMove to Previous FTO (keeps a record)?`)){
-      onRemove(o.id); return; // App.jsx will archive rather than delete
-    }
+    // onRemove routes through App.jsx archiveFTO which opens the reason modal
+    onRemove(o.id); return;
   }
   updF(o.id,k,v);
 };
