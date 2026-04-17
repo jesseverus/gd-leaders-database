@@ -60,6 +60,32 @@ export default function App() {
     return 'FTO';
   };
 
+  // Archive an active FTO record to "Previous FTO" instead of deleting
+  const archiveFTO = useCallback((existingFTO) => {
+    upsertFTO({
+      ...existingFTO,
+      isPrevious:  'Y',
+      removedDate: melbToday(),
+    });
+  }, [upsertFTO]);
+
+  // Check for a previous FTO record and ask before overwriting
+  const checkAndAddFTO = useCallback((newRecord) => {
+    const prevRecord = ftoOfficers.find(f =>
+      f.isPrevious === 'Y' &&
+      (f.gdOfficerId === newRecord.gdOfficerId || f.fullName === newRecord.fullName)
+    );
+    if (prevRecord) {
+      if (!window.confirm(
+        `"${newRecord.fullName}" has a Previous FTO record (removed ${prevRecord.removedDate || 'previously'}).\n\nOverwrite and restore as active FTO?`
+      )) return;
+      // Overwrite the previous record in-place (keep same id, restore fields)
+      upsertFTO({ ...prevRecord, ...newRecord, id: prevRecord.id, isPrevious: 'N', removedDate: '' });
+    } else {
+      upsertFTO(newRecord);
+    }
+  }, [upsertFTO, ftoOfficers]);
+
   // Wrapped officer upsert — syncs FTO cert grants/removals and rank changes into FTO DB
   const handleUpsertOfficer = useCallback((updated) => {
     upsertO(updated);
@@ -70,23 +96,24 @@ export default function App() {
     const hasFTO      = FTO_ACTIVE.has(newFtoCert);
     const prevName    = prev?.fullName ?? updated.fullName;
 
-    // Match by ID first (robust), fall back to previous name for existing records
-    const existingFTO = ftoOfficers.find(f => f.gdOfficerId === updated.id)
-                     ?? ftoOfficers.find(f => f.fullName === prevName);
+    // Match active record by officer ID first, then name
+    const existingFTO = ftoOfficers.find(f => f.isPrevious !== 'Y' && f.gdOfficerId === updated.id)
+                     ?? ftoOfficers.find(f => f.isPrevious !== 'Y' && f.fullName === prevName);
 
     if (hasFTO && !existingFTO) {
-      // FTO cert granted — add to FTO DB, store gdOfficerId so future name changes follow
-      upsertFTO({
+      // FTO cert granted — check for previous record first
+      checkAndAddFTO({
         id: genId(), gdOfficerId: updated.id,
         fullName: updated.fullName, rank: updated.rank,
         division: 'GD', ftoLevel: ftoLevelFromCert(newFtoCert),
         isFTO: 'Y',
         isSFTO: (newFtoCert === 'SFTO' || newFtoCert === 'TL' || newFtoCert === '2IC') ? 'Y' : 'N',
         isAcademyTrainer: 'N', isInductionHost: 'N', isSupervisor: 'N', isLeader: 'N',
+        isPrevious: 'N', removedDate: '', notes: '',
       });
     } else if (!hasFTO && hadFTO && existingFTO) {
-      // FTO cert removed — remove from FTO DB
-      removeFTO(existingFTO.id);
+      // FTO cert removed — archive rather than delete
+      archiveFTO(existingFTO);
     } else if (hasFTO && existingFTO) {
       // Already in FTO DB — sync name, rank and/or level if anything changed
       const nameChanged  = existingFTO.fullName !== updated.fullName;
@@ -103,18 +130,18 @@ export default function App() {
         });
       }
     }
-  }, [upsertO, upsertFTO, removeFTO, officers, ftoOfficers]);
+  }, [upsertO, upsertFTO, officers, ftoOfficers, archiveFTO, checkAndAddFTO]);
 
-  // Wrapped officer remove — also removes from FTO DB if present
+  // Wrapped officer remove — archives FTO record instead of deleting
   const handleRemoveOfficer = useCallback((id) => {
     const o = officers.find(x => x.id === id);
     removeO(id);
     if (o) {
-      const existingFTO = ftoOfficers.find(f => f.gdOfficerId === id)
-                       ?? ftoOfficers.find(f => f.fullName === o.fullName);
-      if (existingFTO) removeFTO(existingFTO.id);
+      const existingFTO = ftoOfficers.find(f => f.isPrevious !== 'Y' && f.gdOfficerId === id)
+                       ?? ftoOfficers.find(f => f.isPrevious !== 'Y' && f.fullName === o.fullName);
+      if (existingFTO) archiveFTO(existingFTO);
     }
-  }, [removeO, removeFTO, officers, ftoOfficers]);
+  }, [removeO, officers, ftoOfficers, archiveFTO]);
 
   // Terminate an officer — adds termination record, removes from GD, FTO DB, and PORT CS
   const handleTerminate = useCallback((o, type, reason) => {
@@ -296,7 +323,10 @@ export default function App() {
         {tab === 2 && <TerminationsTab terminations={terminations} onUpsert={upsertTm} onRemove={removeTm} search={search}/>}
         {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={upsertPT} onRemove={removePT} search={search}/>}
         {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={upsertCS} onRemove={removeCS} search={search}/>}
-        {tab === 5 && <FTOTab ftoOfficers={ftoOfficers} onUpsert={upsertFTO} onRemove={removeFTO} search={search}/>}
+        {tab === 5 && <FTOTab ftoOfficers={ftoOfficers} onUpsert={upsertFTO}
+          onRemove={id=>{const f=ftoOfficers.find(x=>x.id===id);if(f&&f.isPrevious!=='Y')archiveFTO(f);else removeFTO(id);}}
+          onCheckAndAdd={checkAndAddFTO}
+          search={search}/>}
       </div>
 
       {showAddO && <AddOfficerModal certs={sortedCerts}

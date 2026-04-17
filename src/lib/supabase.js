@@ -133,6 +133,10 @@ function ftoToRow(o) {
     is_induction_host: o.isInductionHost ?? 'N',
     is_supervisor: o.isSupervisor ?? 'N',
     is_leader: o.isLeader ?? 'N',
+    is_previous: o.isPrevious ?? 'N',
+    removed_date: o.removedDate ?? '',
+    notes: o.notes ?? '',
+    gd_officer_id: o.gdOfficerId ?? '',
   };
 }
 function rowToFTO(r) {
@@ -144,6 +148,10 @@ function rowToFTO(r) {
     isInductionHost: r.is_induction_host,
     isSupervisor: r.is_supervisor,
     isLeader: r.is_leader,
+    isPrevious: r.is_previous ?? 'N',
+    removedDate: r.removed_date ?? '',
+    notes: r.notes ?? '',
+    gdOfficerId: r.gd_officer_id ?? '',
   };
 }
 

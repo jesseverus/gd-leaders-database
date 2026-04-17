@@ -13,14 +13,28 @@ const FTO_LEVEL_DISPLAY = {
 
 // Props: ftoOfficers, onUpsert(o), onRemove(id), search
 
-export function FTOTab({ftoOfficers,onUpsert,onRemove,search}){
+export function FTOTab({ftoOfficers,onUpsert,onRemove,onCheckAndAdd,search}){
 const[showAdd,setShowAdd]=useState(false);const[form,setForm]=useState({fullName:"",rank:"Senior Constable",division:"GD",ftoLevel:"FTO",isFTO:"Y",isSFTO:"N",isAcademyTrainer:"N",isInductionHost:"N",isSupervisor:"N",isLeader:"N"});
 const[active,setActive]=useState(null);const isA=(id,f)=>active?.id===id&&active?.f===f;const act=(id,f)=>setActive({id,f});const deact=()=>setActive(null);
 const[collapsedLevels,setCollapsedLevels]=useState({});
-const isLevelCollapsed=level=>collapsedLevels[level]??false;
+const[prevCollapsed,setPrevCollapsed]=useState(true);
+const[prevNoteEdit,setPrevNoteEdit]=useState(null);
+const isLevelCollapsed=level=>collapsedLevels[level]??true;
 const toggleLevel=level=>setCollapsedLevels(p=>({...p,[level]:!isLevelCollapsed(level)}));
-const upd=k=>e=>setForm(p=>({...p,[k]:e.target.value}));
-const addOfficer=()=>{if(!form.fullName.trim())return;onUpsert({...form,id:genId(),fullName:form.fullName.trim()});setShowAdd(false);setForm({fullName:"",rank:"Senior Constable",division:"GD",ftoLevel:"FTO",isFTO:"Y",isSFTO:"N",isAcademyTrainer:"N",isInductionHost:"N",isSupervisor:"N",isLeader:"N"});};
+const upd=k=>e=>{
+  const v=e.target.value;
+  let patch={[k]:v};
+  if(k==="rank"&&LEADERSHIP_RANKS_FTO.has(v)){patch={...patch,isFTO:"Y",isSFTO:"Y"};}
+  if(k==="ftoLevel"&&SFTO_LEVELS_SET.has(v)){patch={...patch,isFTO:"Y",isSFTO:"Y"};}
+  setForm(p=>({...p,...patch}));
+};
+const addOfficer=()=>{
+  if(!form.fullName.trim())return;
+  const newRec={...form,id:genId(),fullName:form.fullName.trim(),isPrevious:'N',removedDate:'',notes:''};
+  if(onCheckAndAdd){onCheckAndAdd(newRec);}else{onUpsert(newRec);}
+  setShowAdd(false);
+  setForm({fullName:"",rank:"Senior Constable",division:"GD",ftoLevel:"FTO",isFTO:"Y",isSFTO:"N",isAcademyTrainer:"N",isInductionHost:"N",isSupervisor:"N",isLeader:"N"});
+};
 const del=id=>{if(window.confirm("Remove from FTO Database?"))onRemove(id);};
 // When a cert toggle changes, check if ALL of FTO/SFTO/Trainer/Induction are now N
 // (Supervisor and Leader are excluded per spec)
@@ -29,13 +43,22 @@ const handleToggle=(o,k,v)=>{
   const certFields=["isFTO","isSFTO","isAcademyTrainer","isInductionHost"];
   const allN=certFields.every(f=>updated[f]==="N");
   if(allN){
-    if(window.confirm(`All active certs cleared for ${o.fullName}. Remove from FTO Database?`)){
-      onRemove(o.id); return;
+    if(window.confirm(`All active certs cleared for ${o.fullName}.\nMove to Previous FTO (keeps a record)?`)){
+      onRemove(o.id); return; // App.jsx will archive rather than delete
     }
   }
   updF(o.id,k,v);
 };
-const updF=(id,f,v)=>{const o=ftoOfficers.find(x=>x.id===id);if(o)onUpsert({...o,[f]:v});};
+const LEADERSHIP_RANKS_FTO=new Set(["Superintendent","Onions Burger","Acting Inspector","Senior Sergeant","Acting Senior Sergeant","Sergeant","Acting Sergeant","Leading Senior Constable","Acting LSC","Acting Leading Senior Constable"]);
+const SFTO_LEVELS_SET=new Set(["FTO Senior Leadership/Command","FTO Leader","FTO Supervisor","Senior FTO"]);
+const updF=(id,f,v)=>{
+  const o=ftoOfficers.find(x=>x.id===id);
+  if(!o)return;
+  let updated={...o,[f]:v};
+  if(f==="rank"&&LEADERSHIP_RANKS_FTO.has(v)){updated={...updated,isFTO:"Y",isSFTO:"Y"};}
+  if(f==="ftoLevel"&&SFTO_LEVELS_SET.has(v)){updated={...updated,isFTO:"Y",isSFTO:"Y"};}
+  onUpsert(updated);
+};
 const sq=search.toLowerCase();
 const DIV_ORDER={'GD':0,'HWY':1,'CIRT':2};
 const sorted=[...ftoOfficers]
@@ -54,7 +77,12 @@ const sorted=[...ftoOfficers]
     // 4. Alphabetical by full name
     return(a.fullName??"").localeCompare(b.fullName??"");
   });
-const byLevel={};sorted.forEach(o=>{const l=o.ftoLevel||"FTO";if(!byLevel[l])byLevel[l]=[];byLevel[l].push(o);});
+const activeOfficers=sorted.filter(o=>o.isPrevious!=='Y');
+const previousOfficers=[...ftoOfficers]
+  .filter(o=>o.isPrevious==='Y')
+  .filter(o=>!sq||[o.fullName,o.rank,o.division].some(v=>(v||'').toLowerCase().includes(sq)))
+  .sort((a,b)=>(a.fullName||'').localeCompare(b.fullName||''));
+const byLevel={};activeOfficers.forEach(o=>{const l=o.ftoLevel||"FTO";if(!byLevel[l])byLevel[l]=[];byLevel[l].push(o);});
 const Toggle=({val,onChange})=><button onClick={()=>onChange(val==="Y"?"N":"Y")} style={{background:val==="Y"?"#14532d":"transparent",color:val==="Y"?"#bbf7d0":"#475569",border:`1px solid ${val==="Y"?"#14532d":T.border}`,borderRadius:3,padding:"1px 8px",fontSize:10,fontWeight:700,cursor:"pointer",minWidth:32}}>{val==="Y"?"Y":"N"}</button>;
 const FIELDS=[["isFTO","FTO"],["isSFTO","SFTO"],["isAcademyTrainer","Trainer"],["isInductionHost","Induction"],["isSupervisor","Supervisor"],["isLeader","Leader"]];
 return<div style={{padding:"10px 14px",overflowY:"auto",maxHeight:"calc(100vh - 102px)"}}>
@@ -88,6 +116,44 @@ return<div key={level} style={{marginBottom:16}}>
 <button onClick={()=>del(o.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:13,lineHeight:1,marginLeft:"auto"}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color=T.muted}>✕</button>
 </div>)}
 </div>}</div>;})}
-{sorted.length===0&&<div style={{color:T.muted,textAlign:"center",padding:32,fontSize:13}}>No FTO officers match.</div>}
+{activeOfficers.length===0&&!previousOfficers.length&&<div style={{color:T.muted,textAlign:"center",padding:32,fontSize:13}}>No FTO officers match.</div>}
+
+{/* Previous FTO section */}
+{(previousOfficers.length>0||!sq)&&<div style={{marginTop:16}}>
+<div onClick={()=>setPrevCollapsed(p=>!p)} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px",background:"#040710",borderBottom:`1px solid ${T.borderMid}`,borderTop:`2px solid ${T.borderMid}`,marginBottom:4,cursor:"pointer",userSelect:"none"}}>
+<span style={{color:T.hint,fontSize:11}}>{prevCollapsed?"▶":"▼"}</span>
+<span style={{background:"#374151",color:"#9ca3af",borderRadius:3,padding:"2px 10px",fontSize:9,fontWeight:800,letterSpacing:"0.12em"}}>PREVIOUS FTO</span>
+<span style={{color:T.muted,fontSize:9}}>{previousOfficers.length} officer{previousOfficers.length!==1?"s":""}</span>
+</div>
+{!prevCollapsed&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
+{previousOfficers.length===0&&<div style={{color:T.muted,fontSize:12,textAlign:"center",padding:12}}>No previous FTO officers.</div>}
+{previousOfficers.map(o=>(
+<div key={o.id} style={{background:"#0d0d0d",border:`1px solid ${T.border}`,borderRadius:6,padding:"8px 14px",opacity:0.75}}>
+<div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+<div style={{width:36,height:36,background:"#374151",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+<span style={{color:"#9ca3af",fontSize:10,fontWeight:800}}>{(o.fullName||"?").slice(0,2).toUpperCase()}</span></div>
+<div style={{flex:"0 0 180px",minWidth:0}}>
+<div style={{color:"#9ca3af",fontWeight:700,fontSize:13}}>{o.fullName}</div>
+<div style={{color:T.muted,fontSize:11}}>{o.rank} · {o.division}</div>
+</div>
+<div style={{flex:"0 0 120px",fontSize:11}}>
+<div style={{color:T.muted,fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}}>Removed</div>
+<div style={{color:"#9ca3af"}}>{o.removedDate||"—"}</div>
+</div>
+<div style={{flex:"0 0 80px",fontSize:11}}>
+<div style={{color:T.muted,fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}}>Level</div>
+<div style={{color:"#9ca3af"}}>{o.ftoLevel||"—"}</div>
+</div>
+<div style={{flex:"1 1 200px"}}>
+<div style={{color:T.muted,fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Notes</div>
+{prevNoteEdit===o.id
+?<input autoFocus value={o.notes||""} onChange={e=>onUpsert({...o,notes:e.target.value})} onBlur={()=>setPrevNoteEdit(null)} style={{...BASE_INP,fontSize:12,background:"#060d1a"}}/>
+:<div onClick={()=>setPrevNoteEdit(o.id)} style={{cursor:"pointer",color:o.notes?"#9ca3af":T.muted,fontSize:12,fontStyle:o.notes?"normal":"italic"}}>{o.notes||"Click to add notes…"}</div>}
+</div>
+<button onClick={()=>{if(window.confirm(`Permanently delete ${o.fullName} from Previous FTO?`))onRemove(o.id);}} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:12,lineHeight:1,marginLeft:"auto"}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color=T.muted}>✕</button>
+</div></div>
+))}
+</div>}
+</div>}
 </div>;}
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
