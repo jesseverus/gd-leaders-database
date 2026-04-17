@@ -18,6 +18,7 @@ import {
 
 export function GDTable({officers,certs,onUpsertOfficer,onRemoveOfficer,onUpsertCert,onRemoveCert,search,onTransfer,onTerminate}){
 const[active,setActive]=useState(null);
+const[openMenu,setOpenMenu]=useState(null);
 const isA=(id,col)=>active?.id===id&&active?.col===col;
 const act=(id,col)=>setActive({id,col});
 const deact=()=>setActive(null);
@@ -28,7 +29,7 @@ const delC=id=>{if(window.confirm("Remove cert column?")){onRemoveCert(id);offic
 const csCount={};officers.forEach(o=>{if(o.callsign&&o.callsign!=="-")csCount[o.callsign]=(csCount[o.callsign]||0)+1;});
 const sq=search.toLowerCase();
 const sorted=[...officers].filter(o=>!sq||[o.steamName,o.fullName,o.callsign].some(v=>(v||"").toLowerCase().includes(sq))).sort((a,b)=>{const rd=(RANK_ORDER[a.rank]??99)-(RANK_ORDER[b.rank]??99);if(rd!==0)return rd;return(daysSince(b.lastPromotionDate)??-1)-(daysSince(a.lastPromotionDate)??-1);});
-const CW={full:155,steam:124,call:72,rank:158,lic:60,cert:44,hw:88,hwdate:72,expret:74,daysrem:62,misc:72,promo:72,since:60,restrict:112,ol:54,del:56};
+const CW={full:155,steam:124,call:72,rank:158,lic:60,cert:44,hw:88,hwdate:72,expret:74,daysrem:62,misc:72,promo:72,since:60,restrict:112,ol:54,del:36};
 const thB={background:T.nav,color:T.hint,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",borderRight:`1px solid ${T.border}`,borderBottom:`2px solid ${T.borderMid}`,padding:"5px 3px",textAlign:"center",whiteSpace:"nowrap",position:"sticky",top:0,zIndex:4};
 const th=(w,sl,sticky)=>({...thB,minWidth:w,width:w,...(sticky?{position:"sticky",left:sl,zIndex:6,top:0}:{})});
 const tdB={border:`1px solid ${T.border}`,padding:0,verticalAlign:"middle"};
@@ -67,11 +68,75 @@ rows.push(<tr key={o.id} style={{background:bg,opacity:isOL?0.5:1}} onMouseEnter
 <td style={{...tdB,minWidth:CW.since,width:CW.since}}><DateCell value={o.lastPromotionDate} isActive={isA(o.id,"promo2")} onActivate={()=>act(o.id,"promo2")} onDone={v=>{updO(o.id,"lastPromotionDate",v);deact();}} display={o.lastPromotionDate?<span style={{fontSize:12,fontWeight:700,color:dayCol}}>{days}d</span>:<span style={{color:T.muted,fontSize:11}}>—</span>}/></td>
 <td style={{...tdB,minWidth:CW.restrict,width:CW.restrict}}><TxtCell value={o.rankRestriction} isActive={isA(o.id,"restr")} onActivate={()=>act(o.id,"restr")} onChange={v=>updO(o.id,"rankRestriction",v)} onDone={deact}/></td>
 <td style={{...tdB,minWidth:CW.ol,width:CW.ol}}><DropCell value={o.onLeave||""} options={BOOL_OPTS} isActive={isA(o.id,"ol")} onActivate={()=>act(o.id,"ol")} onDone={v=>{updO(o.id,"onLeave",v);deact();}}><span style={{fontSize:12,fontWeight:700,color:isOL?"#fbbf24":"#22c55e"}}>{isOL?"Yes":"No"}</span></DropCell></td>
-<td style={{...tdB,minWidth:CW.del,width:CW.del,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>
-<button onClick={()=>onTransfer(o)} title="Transfer to division" style={{background:"none",border:"none",cursor:"pointer",color:"#6d28d9",fontSize:13,padding:"2px 3px",lineHeight:1}} onMouseEnter={e=>e.target.style.color="#a855f7"} onMouseLeave={e=>e.target.style.color="#6d28d9"}>→</button>
-<button onClick={()=>{const type=window.confirm(`Terminate "${o.fullName||o.steamName}"? OK=Terminated, Cancel to use Resigned`)?"Terminated":"Resigned";const reason=window.prompt(`Reason for ${type}:`);if(reason===null)return;onTerminate(o,type,reason);}} title="Terminate / Resign" style={{background:"none",border:"none",cursor:"pointer",color:"#b45309",fontSize:11,padding:"2px 3px",lineHeight:1,fontWeight:700}} onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#b45309"}>T</button>
-<button onClick={()=>delO(o.id)} title="Delete (no record)" style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:13,padding:"2px 3px",lineHeight:1}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color=T.muted}>✕</button>
-</div></td>
+<td style={{...tdB,minWidth:CW.del,width:CW.del,textAlign:"center",position:"relative"}}>
+  <button
+    onClick={()=>setOpenMenu(openMenu===o.id?null:o.id)}
+    title="Actions"
+    style={{background:"none",border:"none",cursor:"pointer",color:T.hint,fontSize:15,padding:"2px 6px",lineHeight:1,fontWeight:700,letterSpacing:"0.1em"}}>⋮</button>
+  {openMenu===o.id&&<div style={{position:"fixed",zIndex:9999,background:"#0f1a2e",border:`1px solid ${T.borderMid}`,borderRadius:6,boxShadow:"0 4px 16px rgba(0,0,0,0.6)",minWidth:160,overflow:"hidden"}}
+    onMouseLeave={()=>setOpenMenu(null)}>
+    <div style={{padding:"4px 12px",fontSize:9,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:`1px solid ${T.border}`}}>{o.fullName||o.steamName}</div>
+    <button onClick={()=>{setOpenMenu(null);onTransfer(o);}}
+      style={{display:"block",width:"100%",background:"none",border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",color:"#a78bfa",fontSize:12,padding:"8px 14px",textAlign:"left"}}
+      onMouseEnter={e=>e.currentTarget.style.background="#1a1040"}
+      onMouseLeave={e=>e.currentTarget.style.background="none"}>→ Transfer to division</button>
+    <button onClick={()=>{setOpenMenu(null);
+      if(!window.confirm(`TERMINATE "${o.fullName||o.steamName}"?
+
+This will:
+• Add a Termination record
+• Remove from GD roster
+• Remove from FTO DB
+• Clear PORT callsign
+
+Click OK to confirm Terminated.`))return;
+      const reason=window.prompt(`Reason for termination (required):`);
+      if(reason===null||!reason.trim()){alert("Reason is required.");return;}
+      if(!window.confirm(`Final confirmation:
+Terminate "${o.fullName||o.steamName}"
+Reason: "${reason}"
+
+Proceed?`))return;
+      onTerminate(o,"Terminated",reason.trim());}}
+      style={{display:"block",width:"100%",background:"none",border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",color:"#ef4444",fontSize:12,padding:"8px 14px",textAlign:"left"}}
+      onMouseEnter={e=>e.currentTarget.style.background="#2a0808"}
+      onMouseLeave={e=>e.currentTarget.style.background="none"}>✕ Terminate</button>
+    <button onClick={()=>{setOpenMenu(null);
+      if(!window.confirm(`RESIGN "${o.fullName||o.steamName}"?
+
+This will:
+• Add a Resignation record
+• Remove from GD roster
+• Remove from FTO DB
+• Clear PORT callsign
+
+Click OK to confirm Resigned.`))return;
+      const reason=window.prompt(`Reason for resignation (required):`);
+      if(reason===null||!reason.trim()){alert("Reason is required.");return;}
+      if(!window.confirm(`Final confirmation:
+Resign "${o.fullName||o.steamName}"
+Reason: "${reason}"
+
+Proceed?`))return;
+      onTerminate(o,"Resigned",reason.trim());}}
+      style={{display:"block",width:"100%",background:"none",border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",color:"#fbbf24",fontSize:12,padding:"8px 14px",textAlign:"left"}}
+      onMouseEnter={e=>e.currentTarget.style.background="#1a1200"}
+      onMouseLeave={e=>e.currentTarget.style.background="none"}>↩ Resigned</button>
+    <button onClick={()=>{setOpenMenu(null);
+      if(!window.confirm(`DELETE "${o.fullName||o.steamName}" with NO record kept?
+
+This is permanent and creates no audit trail.
+Use Terminate/Resign instead unless this is a mistake.
+
+Click OK to delete permanently.`))return;
+      if(!window.confirm(`FINAL WARNING: Permanently delete "${o.fullName||o.steamName}"?
+This cannot be undone.`))return;
+      delO(o.id);}}
+      style={{display:"block",width:"100%",background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:12,padding:"8px 14px",textAlign:"left"}}
+      onMouseEnter={e=>e.currentTarget.style.background="#1a1010"}
+      onMouseLeave={e=>e.currentTarget.style.background="none"}>⚠ Delete (no record)</button>
+  </div>}
+</td>
 </tr>);});
 const thTop={...thB,top:0,zIndex:5,fontSize:8,letterSpacing:"0.12em",color:"#3a5878",borderBottom:`1px solid ${T.borderMid}`};
 return<div style={{overflowX:"auto",overflowY:"auto",maxHeight:"calc(100vh - 102px)",borderRadius:7,border:`1px solid ${T.border}`,margin:"0 10px 10px"}}>

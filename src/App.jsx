@@ -118,25 +118,23 @@ export default function App() {
 
   // Terminate an officer — adds termination record, removes from GD, FTO DB, and PORT CS
   const handleTerminate = useCallback((o, type, reason) => {
+    const now = melbToday();
+    const year = new Date().getFullYear().toString();
     // Add termination record
     upsertTm({
       id: genId(), steamName: o.steamName, fullName: o.fullName,
       callsign: o.callsign, rank: o.rank,
-      type, reason, termDate: melbToday(),
-      year: new Date().getFullYear().toString(),
+      type, reason, termDate: now, year,
     });
     // Remove from GD (triggers FTO removal via handleRemoveOfficer)
     handleRemoveOfficer(o.id);
-    // Remove any PORT callsign assignment
+    // Clear any PORT callsign assignment
     portCS.forEach(s => {
       if (s.officer && s.officer.trim().toLowerCase() === (o.fullName||'').trim().toLowerCase()) {
-        onUpsert_CS({...s, officer:''});
+        upsertCS({...s, officer:''});
       }
     });
-  }, [upsertTm, handleRemoveOfficer, portCS]);
-
-  // Expose upsertCS under a stable name for handleTerminate
-  const onUpsert_CS = useCallback((s) => upsertCS(s), [upsertCS]);
+  }, [upsertTm, handleRemoveOfficer, portCS, upsertCS]);
 
   // Transfer an officer from GD tab (adds transfer record, optionally removes from GD)
   const handleTransfer = useCallback((o) => {
