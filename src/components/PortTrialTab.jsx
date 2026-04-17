@@ -1,7 +1,7 @@
 // src/components/PortTrialTab.jsx
 import { useState } from 'react';
 import { T, Btn, FRow, FINP, BASE_INP } from './ui.jsx';
-import { TIER_ROW, melbToday, addDays, fmtShort, genId } from '../lib/utils.js';
+import { TIER_ROW, melbToday, addDays, fmtShort, genId, daysUntil } from '../lib/utils.js';
 
 // Props: portTrials, onUpsert(t), onRemove(id), search
 

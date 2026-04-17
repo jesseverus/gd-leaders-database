@@ -1,7 +1,7 @@
 // src/components/TransfersTab.jsx
 import { useState } from 'react';
 import { T, RankBadge, Btn, BASE_INP } from './ui.jsx';
-import { fmtShort } from '../lib/utils.js';
+import { TIER_ROW, fmtShort } from '../lib/utils.js';
 
 // Props: transfers, onUpsert(t), onRemove(id), search
 

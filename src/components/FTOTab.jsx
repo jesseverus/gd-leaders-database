@@ -3,6 +3,14 @@ import { useState } from 'react';
 import { T, Btn, FRow, FINP, FSEL } from './ui.jsx';
 import { RANKS, RANK_ORDER, RANK_META, TIER_ROW, FTO_LEVELS, FTO_DIV, BASE_INP, genId } from '../lib/utils.js';
 
+const FTO_LEVEL_DISPLAY = {
+  "FTO Senior Leadership/Command": { bg:"#78350f", fg:"#fef9c3" },
+  "FTO Leader":                    { bg:"#1e3a8a", fg:"#bfdbfe" },
+  "FTO Supervisor":                { bg:"#14532d", fg:"#bbf7d0" },
+  "Senior FTO":                    { bg:"#4c1d95", fg:"#ede9fe" },
+  "FTO":                           { bg:"#374151", fg:"#d1d5db" },
+};
+
 // Props: ftoOfficers, onUpsert(o), onRemove(id), search
 
 export function FTOTab({ftoOfficers,onUpsert,onRemove,search}){

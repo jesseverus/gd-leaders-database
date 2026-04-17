@@ -1,7 +1,6 @@
 // src/components/LoginScreen.jsx
 import { useState } from 'react';
-import { T, FINP } from './ui.jsx';
-import { Btn, FRow } from './ui.jsx';
+import { T, FINP, Btn, FRow } from './ui.jsx';
 
 export function LoginScreen({ onLogin, authPw, appName }) {
   const [pw,  setPw]  = useState('');

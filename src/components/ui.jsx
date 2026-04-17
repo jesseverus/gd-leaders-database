@@ -82,4 +82,4 @@ export function RankBadge({ rank, small=false }) {
 }
 
 // Re-export these so components can import from one place
-export { FINP, FSEL, BASE_INP };
+export { T, FINP, FSEL, BASE_INP };
