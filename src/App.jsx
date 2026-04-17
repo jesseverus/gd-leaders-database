@@ -67,12 +67,17 @@ export default function App() {
     const newFtoCert  = updated.certValues?.fto ?? '';
     const hadFTO      = FTO_ACTIVE.has(prevFtoCert);
     const hasFTO      = FTO_ACTIVE.has(newFtoCert);
-    const existingFTO = ftoOfficers.find(f => f.fullName === updated.fullName);
+    const prevName    = prev?.fullName ?? updated.fullName;
+
+    // Match by ID first (robust), fall back to previous name for existing records
+    const existingFTO = ftoOfficers.find(f => f.gdOfficerId === updated.id)
+                     ?? ftoOfficers.find(f => f.fullName === prevName);
 
     if (hasFTO && !existingFTO) {
-      // FTO cert granted — add to FTO DB
+      // FTO cert granted — add to FTO DB, store gdOfficerId so future name changes follow
       upsertFTO({
-        id: genId(), fullName: updated.fullName, rank: updated.rank,
+        id: genId(), gdOfficerId: updated.id,
+        fullName: updated.fullName, rank: updated.rank,
         division: 'GD', ftoLevel: ftoLevelFromCert(newFtoCert),
         isFTO: 'Y',
         isSFTO: (newFtoCert === 'SFTO' || newFtoCert === 'TL' || newFtoCert === '2IC') ? 'Y' : 'N',
@@ -82,13 +87,16 @@ export default function App() {
       // FTO cert removed — remove from FTO DB
       removeFTO(existingFTO.id);
     } else if (hasFTO && existingFTO) {
-      // Already in FTO DB — sync rank and/or level if changed
-      const rankChanged  = existingFTO.rank !== updated.rank;
+      // Already in FTO DB — sync name, rank and/or level if anything changed
+      const nameChanged  = existingFTO.fullName !== updated.fullName;
+      const rankChanged  = existingFTO.rank     !== updated.rank;
       const certChanged  = newFtoCert !== prevFtoCert;
       const levelChanged = certChanged && ftoLevelFromCert(newFtoCert) !== existingFTO.ftoLevel;
-      if (rankChanged || levelChanged) {
+      if (nameChanged || rankChanged || levelChanged) {
         upsertFTO({
           ...existingFTO,
+          gdOfficerId: updated.id,
+          fullName: updated.fullName,
           rank:     updated.rank,
           ftoLevel: levelChanged ? ftoLevelFromCert(newFtoCert) : existingFTO.ftoLevel,
         });
@@ -101,7 +109,8 @@ export default function App() {
     const o = officers.find(x => x.id === id);
     removeO(id);
     if (o) {
-      const existingFTO = ftoOfficers.find(f => f.fullName === o.fullName);
+      const existingFTO = ftoOfficers.find(f => f.gdOfficerId === id)
+                       ?? ftoOfficers.find(f => f.fullName === o.fullName);
       if (existingFTO) removeFTO(existingFTO.id);
     }
   }, [removeO, removeFTO, officers, ftoOfficers]);

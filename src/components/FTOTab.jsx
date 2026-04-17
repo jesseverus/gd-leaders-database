@@ -21,7 +21,23 @@ const addOfficer=()=>{if(!form.fullName.trim())return;onUpsert({...form,id:genId
 const del=id=>{if(window.confirm("Remove from FTO Database?"))onRemove(id);};
 const updF=(id,f,v)=>{const o=ftoOfficers.find(x=>x.id===id);if(o)onUpsert({...o,[f]:v});};
 const sq=search.toLowerCase();
-const sorted=[...ftoOfficers].filter(o=>!sq||[o.fullName,o.rank,o.division,o.ftoLevel].some(v=>(v||"").toLowerCase().includes(sq))).sort((a,b)=>{const la=FTO_LEVELS.indexOf(a.ftoLevel??"")||99;const lb=FTO_LEVELS.indexOf(b.ftoLevel??"")||99;if(la!==lb)return la-lb;return(RANK_ORDER[a.rank]??99)-(RANK_ORDER[b.rank]??99);});
+const DIV_ORDER={'GD':0,'HWY':1,'CIRT':2};
+const sorted=[...ftoOfficers]
+  .filter(o=>!sq||[o.fullName,o.rank,o.division,o.ftoLevel].some(v=>(v||"").toLowerCase().includes(sq)))
+  .sort((a,b)=>{
+    // 1. FTO level group
+    const la=FTO_LEVELS.indexOf(a.ftoLevel??"");
+    const lb=FTO_LEVELS.indexOf(b.ftoLevel??"");
+    if(la!==lb)return la-lb;
+    // 2. Rank
+    const ra=(RANK_ORDER[a.rank]??99)-(RANK_ORDER[b.rank]??99);
+    if(ra!==0)return ra;
+    // 3. Division — GD first, then HWY, then CIRT, then others
+    const da=(DIV_ORDER[a.division]??3)-(DIV_ORDER[b.division]??3);
+    if(da!==0)return da;
+    // 4. Alphabetical by full name
+    return(a.fullName??"").localeCompare(b.fullName??"");
+  });
 const byLevel={};sorted.forEach(o=>{const l=o.ftoLevel||"FTO";if(!byLevel[l])byLevel[l]=[];byLevel[l].push(o);});
 const Toggle=({val,onChange})=><button onClick={()=>onChange(val==="Y"?"N":"Y")} style={{background:val==="Y"?"#14532d":"transparent",color:val==="Y"?"#bbf7d0":"#475569",border:`1px solid ${val==="Y"?"#14532d":T.border}`,borderRadius:3,padding:"1px 8px",fontSize:10,fontWeight:700,cursor:"pointer",minWidth:32}}>{val==="Y"?"Y":"N"}</button>;
 const FIELDS=[["isFTO","FTO"],["isSFTO","SFTO"],["isAcademyTrainer","Trainer"],["isInductionHost","Induction"],["isSupervisor","Supervisor"],["isLeader","Leader"]];
