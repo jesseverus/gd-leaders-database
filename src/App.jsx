@@ -129,7 +129,7 @@ export default function App() {
     const newFtoCert  = updated.certValues?.fto ?? '';
     const hadFTO      = FTO_ACTIVE.has(prevFtoCert);
     const hasFTO      = FTO_ACTIVE.has(newFtoCert);
-    const prevName    = prev?.fullName ?? updated.fullName;
+    // prevName already declared above in the cross-tab sync block
 
     // Match active record by officer ID first, then name
     const existingFTO = ftoOfficers.find(f => f.isPrevious !== 'Y' && f.gdOfficerId === updated.id)
