@@ -30,11 +30,11 @@ return<div style={{padding:"10px 14px",overflowY:"auto",maxHeight:"calc(100vh - 
 {!isCollapsed(year)&&<div style={{marginTop:4,display:"flex",flexDirection:"column",gap:4}}>
 {[...byYear[year]].sort((a,b)=>(a.promoDate||"")>(b.promoDate||"")?-1:1).map(t=>
 <div key={t.id} style={{background:TIER_ROW.silver.even,border:`1px solid ${T.border}`,borderRadius:6,padding:"8px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-<div style={{flex:"0 0 170px"}}>{isA(t.id,"fn")?<input autoFocus value={t.fullName} onChange={e=>updT(t.id,"fullName",e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:13}}/>:<div onClick={()=>act(t.id,"fn")} style={{cursor:"pointer",color:T.text,fontWeight:700,fontSize:13}}>{t.fullName||t.steamName}</div>}<div style={{color:T.hint,fontSize:11}}>{t.steamName}</div></div>
+<div style={{flex:"0 0 170px"}}>{isA(t.id,"fn")?<input autoFocus defaultValue={t.fullName} onChange={()=>{}} onBlur={e=>{updT(t.id,"fullName",e.target.value);deact();}} style={{...BASE_INP,fontSize:13}}/>:<div onClick={()=>act(t.id,"fn")} style={{cursor:"pointer",color:T.text,fontWeight:700,fontSize:13}}>{t.fullName||t.steamName}</div>}<div style={{color:T.hint,fontSize:11}}>{t.steamName}</div></div>
 <div style={{flex:"0 0 160px"}}><RankBadge rank={t.rank} small/></div>
 <div style={{flex:"0 0 80px",textAlign:"center"}}><div style={{background:t.division==="CIRT"?"#1e3a8a":t.division==="HWY"?"#78350f":"#374151",color:t.division?"#bfdbfe":"#9ca3af",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,display:"inline-block"}}>{t.division||"—"}</div></div>
 <div style={{flex:"0 0 130px",fontSize:12,color:T.hint}}>Transfer date: <span style={{color:T.text}}>{fmtShort(t.promoDate)||"—"}</span></div>
-<div style={{flex:"2 1 160px",fontSize:12}}>{isA(t.id,"notes")?<input autoFocus value={t.notes||""} onChange={e=>updT(t.id,"notes",e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:12}}/>:<div onClick={()=>act(t.id,"notes")} style={{cursor:"pointer",color:t.notes?T.text:T.muted,fontSize:12}}>{t.notes||"Notes…"}</div>}</div>
+<div style={{flex:"2 1 160px",fontSize:12}}>{isA(t.id,"notes")?<input autoFocus defaultValue={t.notes||""} onChange={()=>{}} onBlur={e=>{updT(t.id,"notes",e.target.value);deact();}} style={{...BASE_INP,fontSize:12}}/>:<div onClick={()=>act(t.id,"notes")} style={{cursor:"pointer",color:t.notes?T.text:T.muted,fontSize:12}}>{t.notes||"Notes…"}</div>}</div>
 <button onClick={()=>del(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:14,lineHeight:1}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color=T.muted}>✕</button>
 </div>)}
 </div>}

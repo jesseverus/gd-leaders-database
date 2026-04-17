@@ -1,7 +1,7 @@
 // src/components/ui.jsx
 // Reusable UI atoms used across all tab components.
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { T, BASE_INP, FINP, FSEL, CV_META, fmtShort } from '../lib/utils.js';
 
 export function Btn({ children, variant='primary', size='md', onClick, style:s={}, disabled=false, title='' }) {
@@ -42,10 +42,14 @@ export function FRow({ label, children }) {
 
 export function TxtCell({ value, isActive, onActivate, onChange, onDone, align='left', mono=false, placeholder='' }) {
   const ref = useRef(null);
-  useEffect(() => { if (isActive && ref.current) { ref.current.focus(); ref.current.select(); } }, [isActive]);
-  if (isActive) return <input ref={ref} value={value || ''} placeholder={placeholder}
-    onChange={e => onChange(e.target.value)} onBlur={onDone}
-    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') onDone(); e.stopPropagation(); }}
+  // Buffer the typed value locally — only save (onChange) when user blurs or presses Enter/Tab
+  const [local, setLocal] = useState(value || '');
+  useEffect(() => { if (isActive) { setLocal(value || ''); if (ref.current) { ref.current.focus(); ref.current.select(); } } }, [isActive]);
+  const commit = () => { onChange(local); onDone(); };
+  if (isActive) return <input ref={ref} value={local} placeholder={placeholder}
+    onChange={e => setLocal(e.target.value)}
+    onBlur={commit}
+    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commit(); } e.stopPropagation(); }}
     style={{...BASE_INP, fontFamily:mono?'monospace':'inherit', textAlign:align}}/>;
   return <div onClick={onActivate} style={{cursor:'pointer',height:'100%',display:'flex',alignItems:'center',padding:'2px 5px',justifyContent:align==='center'?'center':'flex-start',minHeight:26}}>
     <span style={{fontSize:mono?12:13,fontFamily:mono?'monospace':'inherit',color:value?T.text:T.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{value || ''}</span>

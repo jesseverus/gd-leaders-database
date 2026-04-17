@@ -113,7 +113,7 @@ return<div key={level} style={{marginBottom:16}}>
 {!isLevelCollapsed(level)&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
 {grp.map(o=><div key={o.id} style={{background:TIER_ROW.silver.even,border:`1px solid ${T.border}`,borderRadius:6,padding:"8px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
 <div style={{width:36,height:36,background:RANK_META[o.rank]?.bg||"#374151",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{color:RANK_META[o.rank]?.fg||"#d1d5db",fontSize:10,fontWeight:800}}>{(o.fullName||"?").slice(0,2).toUpperCase()}</span></div>
-<div style={{flex:"0 0 180px",minWidth:0}}>{isA(o.id,"fn")?<input autoFocus value={o.fullName} onChange={e=>updF(o.id,"fullName",e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:13}}/>:<div onClick={()=>act(o.id,"fn")} style={{cursor:"pointer",color:T.text,fontWeight:700,fontSize:13}}>{o.fullName}</div>}<select value={o.division||"GD"} onChange={e=>updF(o.id,"division",e.target.value)}
+<div style={{flex:"0 0 180px",minWidth:0}}>{isA(o.id,"fn")?<input autoFocus defaultValue={o.fullName} onChange={()=>{}} onBlur={e=>{updF(o.id,"fullName",e.target.value);deact();}} style={{...BASE_INP,fontSize:13}}/>:<div onClick={()=>act(o.id,"fn")} style={{cursor:"pointer",color:T.text,fontWeight:700,fontSize:13}}>{o.fullName}</div>}<select value={o.division||"GD"} onChange={e=>updF(o.id,"division",e.target.value)}
   style={{background:"transparent",border:"none",borderBottom:`1px solid ${T.border}`,color:T.hint,fontSize:11,cursor:"pointer",padding:"1px 0",outline:"none",width:"100%",marginTop:2}}>
   {FTO_DIV.map(d=><option key={d} value={d}>{DIV_LABELS[d]||d}</option>)}
 </select></div>
@@ -154,7 +154,7 @@ return<div key={level} style={{marginBottom:16}}>
 <div style={{flex:"1 1 200px"}}>
 <div style={{color:T.muted,fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Notes</div>
 {prevNoteEdit===o.id
-?<input autoFocus value={o.notes||""} onChange={e=>onUpsert({...o,notes:e.target.value})} onBlur={()=>setPrevNoteEdit(null)} style={{...BASE_INP,fontSize:12,background:"#060d1a"}}/>
+?<input autoFocus defaultValue={o.notes||""} onChange={()=>{}} onBlur={e=>{onUpsert({...o,notes:e.target.value});setPrevNoteEdit(null);}} style={{...BASE_INP,fontSize:12,background:"#060d1a"}}/>
 :<div onClick={()=>setPrevNoteEdit(o.id)} style={{cursor:"pointer",color:o.notes?"#9ca3af":T.muted,fontSize:12,fontStyle:o.notes?"normal":"italic"}}>{o.notes||"Click to add notes…"}</div>}
 </div>
 <div style={{display:"flex",gap:6,alignItems:"center",marginLeft:"auto"}}>

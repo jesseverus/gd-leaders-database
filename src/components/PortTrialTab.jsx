@@ -75,10 +75,10 @@ export function PortTrialTab({portTrials,onUpsert,onRemove,search}){
 
         <div style={{flex:'0 0 200px'}}>
           {isA(t.id,'name')
-            ? <input autoFocus value={t.name} onChange={e=>updT(t.id,'name',e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:13}}/>
+            ? <input autoFocus defaultValue={t.name} onChange={()=>{}} onBlur={e=>{updT(t.id,'name',e.target.value);deact();}} style={{...BASE_INP,fontSize:13}}/>
             : <div onClick={()=>act(t.id,'name')} style={{cursor:'pointer',color:T.text,fontWeight:700,fontSize:13}}>{t.name}</div>}
           {isA(t.id,'rank')
-            ? <input autoFocus value={t.rank} onChange={e=>updT(t.id,'rank',e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:11}}/>
+            ? <input autoFocus defaultValue={t.rank} onChange={()=>{}} onBlur={e=>{updT(t.id,'rank',e.target.value);deact();}} style={{...BASE_INP,fontSize:11}}/>
             : <div onClick={()=>act(t.id,'rank')} style={{cursor:'pointer',color:T.hint,fontSize:11}}>{t.rank||'—'}</div>}
         </div>
 
@@ -107,7 +107,7 @@ export function PortTrialTab({portTrials,onUpsert,onRemove,search}){
 
         <div style={{flex:'1 1 160px',fontSize:12}}>
           {isA(t.id,'notes')
-            ? <input autoFocus value={t.notes||''} onChange={e=>updT(t.id,'notes',e.target.value)} onBlur={deact} style={{...BASE_INP,fontSize:12}}/>
+            ? <input autoFocus defaultValue={t.notes||''} onChange={()=>{}} onBlur={e=>{updT(t.id,'notes',e.target.value);deact();}} style={{...BASE_INP,fontSize:12}}/>
             : <div onClick={()=>act(t.id,'notes')} style={{cursor:'pointer',color:t.notes?T.text:T.muted,fontSize:12}}>{t.notes||'Notes…'}</div>}
         </div>
 

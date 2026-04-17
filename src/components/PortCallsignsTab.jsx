@@ -142,9 +142,9 @@ export function PortCallsignsTab({portCS, onUpsert, onRemove, search}){
         </td>
         <td style={{padding:'4px 8px',borderRight:`1px solid ${T.border}`}}>
           {editing===s.id
-            ? <input autoFocus value={s.officer||''}
-                onChange={e=>updateOfficer(s.id,e.target.value)}
-                onBlur={()=>setEditing(null)}
+            ? <input autoFocus defaultValue={s.officer||''}
+                onChange={()=>{}}
+                onBlur={e=>{updateOfficer(s.id,e.target.value);setEditing(null);}}
                 onKeyDown={e=>{if(e.key==='Enter'||e.key==='Escape')setEditing(null);}}
                 style={{...BASE_INP,fontSize:12,background:'transparent'}}/>
             : <div onClick={()=>setEditing(s.id)}
