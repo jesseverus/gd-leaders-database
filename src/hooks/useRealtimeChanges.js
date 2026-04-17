@@ -1,15 +1,16 @@
 // src/hooks/useRealtimeChanges.js
-// Subscribes to real-time changes on all GDL tables via Supabase Realtime.
-// - Debounces per-record: if the same record is updated multiple times within
-//   DEBOUNCE_MS, only one notification fires (last write wins).
-// - Auto-dismisses each notification after AUTO_DISMISS_MS.
-// - Ignores changes made by the current browser session.
+// Realtime change notifications with:
+// - Per-record debounce (DEBOUNCE_MS) so rapid typing doesn't flood notifications
+// - Auto-dismiss toasts after AUTO_DISMISS_MS
+// - Auto-reload when external change arrives, UNLESS user is actively typing
+// - If typing: queues a reload and shows toast; reloads when they stop (on blur)
+// - Modal/overlay fields: never trigger reload until focus leaves the modal
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 
-const DEBOUNCE_MS     = 2500; // wait this long after last change before notifying
-const AUTO_DISMISS_MS = 6000; // each notification disappears after this long
+const DEBOUNCE_MS     = 2500;
+const AUTO_DISMISS_MS = 6000;
 
 const getSessionId = () => {
   let id = sessionStorage.getItem('gdl_session_id');
@@ -43,12 +44,55 @@ function rowLabel(table, row) {
   return '';
 }
 
-export function useRealtimeChanges() {
-  const [changes, setChanges]   = useState([]);
-  const debounceTimers          = useRef({});
-  const dismissTimers           = useRef({});
-  const recentWrites            = useRef(new Set());
+// Returns true if the currently focused element is inside a modal overlay
+// (anything with zIndex >= 9000 or a [data-modal] attribute in its ancestor chain)
+function isInsideModal(el) {
+  let node = el;
+  while (node && node !== document.body) {
+    const z = parseInt(window.getComputedStyle(node).zIndex || '0', 10);
+    if (z >= 9000) return true;
+    if (node.dataset?.modal !== undefined) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
 
+export function useRealtimeChanges() {
+  const [changes, setChanges] = useState([]);
+  const debounceTimers        = useRef({});
+  const dismissTimers         = useRef({});
+  const recentWrites          = useRef(new Set());
+  const isTyping              = useRef(false);  // true while an input/textarea has focus
+  const isInModal             = useRef(false);  // true if focused element is in a modal
+  const pendingReload         = useRef(false);  // reload queued but waiting for blur
+
+  // ── Typing detection ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const onFocusIn = (e) => {
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        isTyping.current  = true;
+        isInModal.current = isInsideModal(e.target);
+      }
+    };
+    const onFocusOut = () => {
+      isTyping.current  = false;
+      isInModal.current = false;
+      // If a reload was queued while the user was typing, do it now
+      if (pendingReload.current) {
+        pendingReload.current = false;
+        window.location.reload();
+      }
+    };
+    document.addEventListener('focusin',  onFocusIn,  true);
+    document.addEventListener('focusout', onFocusOut, true);
+    return () => {
+      document.removeEventListener('focusin',  onFocusIn,  true);
+      document.removeEventListener('focusout', onFocusOut, true);
+    };
+  }, []);
+
+  // ── Auto-dismiss timer ───────────────────────────────────────────────────────
   const scheduleDismiss = useCallback((key) => {
     clearTimeout(dismissTimers.current[key]);
     dismissTimers.current[key] = setTimeout(() => {
@@ -57,15 +101,17 @@ export function useRealtimeChanges() {
     }, AUTO_DISMISS_MS);
   }, []);
 
+  // ── Supabase subscription ────────────────────────────────────────────────────
   useEffect(() => {
     const channel = supabase.channel('gdl_realtime_all');
 
     ALL_TABLES.forEach(table => {
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
-        const row        = payload.new || payload.old;
-        const id         = row?.id;
-        const eventType  = payload.eventType;
+        const row       = payload.new || payload.old;
+        const id        = row?.id;
+        const eventType = payload.eventType;
 
+        // Ignore our own writes
         if (id && recentWrites.current.has(id)) return;
 
         const debounceKey = `${table}_${id}`;
@@ -74,6 +120,22 @@ export function useRealtimeChanges() {
         debounceTimers.current[debounceKey] = setTimeout(() => {
           delete debounceTimers.current[debounceKey];
 
+          // ── Decide whether to auto-reload or show a toast ────────────────
+          const userBusy = isTyping.current; // true if they're in any input field
+
+          if (!userBusy) {
+            // Nobody typing — reload immediately and silently
+            window.location.reload();
+            return;
+          }
+
+          // User is typing — show toast and queue reload for when they finish
+          // But if they're inside a modal, don't queue — wait for them to close it
+          if (!isInModal.current) {
+            pendingReload.current = true;
+          }
+
+          // Show toast notification
           const label     = rowLabel(table, row);
           const eventWord = eventType === 'INSERT' ? 'added'
                           : eventType === 'DELETE' ? 'removed' : 'updated';
@@ -87,6 +149,7 @@ export function useRealtimeChanges() {
               event: eventWord,
               label: label || 'a record',
               time: new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+              pending: !isInModal.current, // will auto-reload on blur
             }].slice(-10);
           });
 
@@ -103,6 +166,7 @@ export function useRealtimeChanges() {
     };
   }, [scheduleDismiss]);
 
+  // ── Helpers ──────────────────────────────────────────────────────────────────
   const markWritten = useCallback((id) => {
     if (!id) return;
     recentWrites.current.add(id);
@@ -112,13 +176,19 @@ export function useRealtimeChanges() {
   const dismiss = useCallback(() => {
     Object.values(dismissTimers.current).forEach(clearTimeout);
     dismissTimers.current = {};
+    pendingReload.current = false;
     setChanges([]);
   }, []);
 
   const dismissOne = useCallback((key) => {
     clearTimeout(dismissTimers.current[key]);
     delete dismissTimers.current[key];
-    setChanges(prev => prev.filter(c => c.key !== key));
+    setChanges(prev => {
+      const remaining = prev.filter(c => c.key !== key);
+      // If no more pending reloads in the queue, cancel the pending flag
+      if (!remaining.some(c => c.pending)) pendingReload.current = false;
+      return remaining;
+    });
   }, []);
 
   return { changes, markWritten, dismiss, dismissOne };

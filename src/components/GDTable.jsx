@@ -19,6 +19,7 @@ import {
 export function GDTable({officers,certs,onUpsertOfficer,onRemoveOfficer,onUpsertCert,onRemoveCert,search,onTransfer,onTerminate}){
 const[active,setActive]=useState(null);
 const[openMenu,setOpenMenu]=useState(null);
+const[rankUndo,setRankUndo]=useState(null); // {id,prevRank,prevPromo,timer}
 
 const isA=(id,col)=>active?.id===id&&active?.col===col;
 const act=(id,col)=>setActive({id,col});
@@ -27,6 +28,19 @@ const updO=(id,f,v)=>{const o=officers.find(x=>x.id===id);if(o)onUpsertOfficer({
 const updCV=(id,cid,v)=>{const o=officers.find(x=>x.id===id);if(o)onUpsertOfficer({...o,certValues:{...o.certValues,[cid]:v}});};
 const delO=id=>{if(window.confirm(`Remove officer?`))onRemoveOfficer(id);};
 const delC=id=>{if(window.confirm("Remove cert column?")){onRemoveCert(id);officers.forEach(o=>{const cv={...o.certValues};delete cv[id];onUpsertOfficer({...o,certValues:cv});});}};
+const handleRankChange=(o,newRank)=>{
+  if(newRank===o.rank)return;
+  if(!window.confirm(`Change ${o.fullName||o.steamName}'s rank from "${o.rank}" to "${newRank}"?\n\nThis will update their Last Promotion Date to today.`))return;
+  // Store undo state
+  const prevRank=o.rank;
+  const prevPromo=o.lastPromotionDate;
+  if(rankUndo?.timer)clearTimeout(rankUndo.timer);
+  const timer=setTimeout(()=>setRankUndo(null),5*60*1000); // 5 min undo window
+  setRankUndo({id:o.id,prevRank,prevPromo,timer});
+  // Apply rank change + update promo date
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Melbourne'});
+  onUpsertOfficer({...o,rank:newRank,lastPromotionDate:today});
+};
 const csCount={};officers.forEach(o=>{if(o.callsign&&o.callsign!=="-")csCount[o.callsign]=(csCount[o.callsign]||0)+1;});
 const sq=search.toLowerCase();
 const sorted=[...officers].filter(o=>!sq||[o.steamName,o.fullName,o.callsign].some(v=>(v||"").toLowerCase().includes(sq))).sort((a,b)=>{const rd=(RANK_ORDER[a.rank]??99)-(RANK_ORDER[b.rank]??99);if(rd!==0)return rd;return(daysSince(b.lastPromotionDate)??-1)-(daysSince(a.lastPromotionDate)??-1);});
@@ -57,7 +71,7 @@ rows.push(<tr key={o.id} style={{background:bg,opacity:isOL?0.5:1}} onMouseEnter
 <td style={tdS(bg)}><TxtCell value={o.fullName} isActive={isA(o.id,"full")} onActivate={()=>act(o.id,"full")} onChange={v=>updO(o.id,"fullName",v)} onDone={deact}/></td>
 <td style={{...tdB,minWidth:CW.steam,width:CW.steam}}><TxtCell value={o.steamName} mono isActive={isA(o.id,"steam")} onActivate={()=>act(o.id,"steam")} onChange={v=>updO(o.id,"steamName",v)} onDone={deact}/></td>
 <td style={{...tdB,minWidth:CW.call,width:CW.call,...(isDup?{boxShadow:"inset 0 0 0 2px #ef4444"}:{})}}><TxtCell value={o.callsign} mono align="center" isActive={isA(o.id,"call")} onActivate={()=>act(o.id,"call")} onChange={v=>updO(o.id,"callsign",v)} onDone={deact}/></td>
-<td style={{...tdB,minWidth:CW.rank,width:CW.rank}}><DropCell value={o.rank} options={RANKS.map(r=>({value:r,label:r}))} isActive={isA(o.id,"rank")} onActivate={()=>act(o.id,"rank")} onDone={v=>{updO(o.id,"rank",v);deact();}}><RankBadge rank={o.rank}/></DropCell></td>
+<td style={{...tdB,minWidth:CW.rank,width:CW.rank}}><DropCell value={o.rank} options={RANKS.map(r=>({value:r,label:r}))} isActive={isA(o.id,"rank")} onActivate={()=>act(o.id,"rank")} onDone={v=>{handleRankChange(o,v);deact();}}><RankBadge rank={o.rank}/></DropCell></td>
 <td style={{...tdB,minWidth:CW.lic,width:CW.lic}}><DropCell value={o.licenseClass} options={["Gold","Silver","Bronze",""].map(v=>({value:v,label:v||"—"}))} isActive={isA(o.id,"lic")} onActivate={()=>act(o.id,"lic")} onDone={v=>{updO(o.id,"licenseClass",v);deact();}}><span style={{background:licM.bg,color:licM.fg,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700}}>{o.licenseClass||"—"}</span></DropCell></td>
 {certs.map(cert=>{const cv=o.certValues?.[cert.id]||"";return<td key={cert.id} style={{...tdB,minWidth:CW.cert,width:CW.cert}} title={cert.fullName}><DropCell value={cv} options={certOpts(cert.id)} isActive={isA(o.id,`cv_${cert.id}`)} onActivate={()=>act(o.id,`cv_${cert.id}`)} onDone={v=>{updCV(o.id,cert.id,v);deact();}}><CvBadge val={cv}/></DropCell></td>;})}
 <td style={{...tdB,minWidth:CW.hw,width:CW.hw}}><DropCell value={o.hoursWarning||""} options={HW_OPTS.map(v=>({value:v,label:v||"—"}))} isActive={isA(o.id,"hw")} onActivate={()=>act(o.id,"hw")} onDone={v=>{updO(o.id,"hoursWarning",v);deact();}}><span style={{fontSize:12,fontWeight:600,color:hwM.color,whiteSpace:"nowrap"}}>{hwM.label}</span></DropCell></td>
@@ -138,12 +152,31 @@ const ActionModal=()=>{
 };
 
 const thTop={...thB,top:0,zIndex:5,fontSize:8,letterSpacing:"0.12em",color:"#3a5878",borderBottom:`1px solid ${T.borderMid}`,background:T.nav};
-return<div style={{overflowX:"auto",overflowY:"auto",maxHeight:"calc(100vh - 102px)",borderRadius:7,border:`1px solid ${T.border}`,margin:"0 10px 10px"}}>
+return<div style={{position:'relative'}}>
+{rankUndo&&(
+<div style={{position:'sticky',top:0,zIndex:20,background:'#1c1200',border:'1px solid #92400e',
+  borderRadius:6,padding:'8px 14px',margin:'0 10px 6px',
+  display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+  <span style={{color:'#fef3c7',fontSize:12,flex:1}}>
+    Rank changed. You have 5 minutes to undo.
+  </span>
+  <button onClick={()=>{
+    const o=officers.find(x=>x.id===rankUndo.id);
+    if(o)onUpsertOfficer({...o,rank:rankUndo.prevRank,lastPromotionDate:rankUndo.prevPromo});
+    clearTimeout(rankUndo.timer);
+    setRankUndo(null);
+  }} style={{background:'#92400e',border:'none',borderRadius:4,color:'#fef3c7',
+    fontSize:11,padding:'4px 12px',cursor:'pointer',fontWeight:700,flexShrink:0}}>Undo rank change</button>
+  <button onClick={()=>{clearTimeout(rankUndo.timer);setRankUndo(null);}} 
+    style={{background:'none',border:'none',color:'#92400e',fontSize:14,cursor:'pointer',lineHeight:1}}>×</button>
+</div>
+)}
+<div style={{overflowX:"auto",overflowY:"auto",maxHeight:"calc(100vh - 102px)",borderRadius:7,border:`1px solid ${T.border}`,margin:"0 10px 10px"}}>
 <table style={{borderCollapse:"collapse",width:"max-content",tableLayout:"fixed"}}><thead>
 <tr style={{background:T.nav}}><th style={{...thTop,position:"sticky",left:0,zIndex:8,background:T.nav,textAlign:"center"}}>OFFICER INFO</th><th colSpan={4} style={{...thTop,background:T.nav}}/><th colSpan={certs.length} style={{...thTop,background:"#08152a",color:"#3a6080"}}>CERTIFICATIONS</th><th colSpan={5} style={{...thTop,background:"#150a1e",color:"#5a3878"}}>LEAVE &amp; WARNINGS</th><th colSpan={3} style={{...thTop,background:"#0a1a0a",color:"#3a6840"}}>PROMOTION</th><th colSpan={2} style={{...thTop,background:T.nav}}/></tr>
 <tr style={{background:T.nav}}><th style={{...th(CW.full,0,true),top:22,zIndex:7}}>Full Name</th><th style={{...th(CW.steam),top:22}}>Steam</th><th style={{...th(CW.call),top:22}}>Callsign</th><th style={{...th(CW.rank),top:22}}>Rank</th><th style={{...th(CW.lic),top:22}}>Lic.</th>
 {certs.map(c=><th key={c.id} title={c.fullName} style={{...th(CW.cert),top:22}}><div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}><span style={{fontSize:9}}>{c.name}</span><button onClick={()=>delC(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#1e3050",fontSize:8,padding:0,lineHeight:1}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color="#1e3050"}>×</button></div></th>)}
 <th style={{...th(CW.hw),top:22}}>Hours Warning</th><th style={{...th(CW.hwdate),top:22}}>HW Date</th><th style={{...th(CW.expret),top:22}}>Exp. Return</th><th style={{...th(CW.daysrem),top:22}}>Days Left</th><th style={{...th(CW.misc),top:22}}>Last Misc.</th><th style={{...th(CW.promo),top:22}}>Last Promo</th><th style={{...th(CW.since),top:22}} title="Days since promo ↓">Since ↓</th><th style={{...th(CW.restrict),top:22}}>Restriction</th><th style={{...th(CW.ol),top:22}}>Leave</th><th style={{...th(CW.del),top:22}}/></tr>
-</thead><tbody>{sorted.length===0?<tr><td colSpan={totalCols} style={{padding:32,textAlign:"center",color:T.muted,fontSize:13}}>{search?"No results.":"No officers."}</td></tr>:rows}</tbody></table><ActionModal/></div>;}
+</thead><tbody>{sorted.length===0?<tr><td colSpan={totalCols} style={{padding:32,textAlign:"center",color:T.muted,fontSize:13}}>{search?"No results.":"No officers."}</td></tr>:rows}</tbody></table><ActionModal/></div></div>;}
 
 // ─── TAB 2: TRANSFERS ─────────────────────────────────────────────────────────

@@ -104,6 +104,27 @@ export default function App() {
   const handleUpsertOfficer = useCallback((updated) => {
     upsertO(updated);
     const prev        = officers.find(o => o.id === updated.id);
+
+    // ── Cross-tab name sync ──────────────────────────────────────────
+    // If the officer's full name changed, propagate it to PORT Trials and PORT CS
+    const prevName = prev?.fullName ?? '';
+    const newName  = updated.fullName ?? '';
+    if (prevName && newName && prevName !== newName) {
+      // PORT Trials — match by name (case-insensitive)
+      portTrials.forEach(t => {
+        if ((t.name || '').trim().toLowerCase() === prevName.trim().toLowerCase()) {
+          upsertPT({ ...t, name: newName });
+        }
+      });
+      // PORT Callsigns — match officer field by name (case-insensitive)
+      portCS.forEach(s => {
+        if ((s.officer || '').trim().toLowerCase() === prevName.trim().toLowerCase()) {
+          upsertCS({ ...s, officer: newName });
+        }
+      });
+    }
+    // ────────────────────────────────────────────────────────────────
+
     const prevFtoCert = prev?.certValues?.fto ?? '';
     const newFtoCert  = updated.certValues?.fto ?? '';
     const hadFTO      = FTO_ACTIVE.has(prevFtoCert);
@@ -145,7 +166,7 @@ export default function App() {
         });
       }
     }
-  }, [upsertO, upsertFTO, officers, ftoOfficers, archiveFTO, checkAndAddFTO]);
+  }, [upsertO, upsertFTO, upsertPT, upsertCS, officers, ftoOfficers, portTrials, portCS, archiveFTO, checkAndAddFTO]);
 
   // Wrapped officer remove — archives FTO record instead of deleting
   const handleRemoveOfficer = useCallback((id) => {
@@ -193,6 +214,50 @@ export default function App() {
       removeO(o.id);
     }
   }, [upsertT, removeO]);
+
+  // Wrapped PORT CS upsert — if officer name changes, sync back to GD and PORT Trials
+  const handleUpsertCS = useCallback((s) => {
+    const prev = portCS.find(x => x.id === s.id);
+    upsertCS(s);
+    const prevOfficer = (prev?.officer || '').trim();
+    const newOfficer  = (s.officer   || '').trim();
+    if (!prevOfficer || !newOfficer || prevOfficer.toLowerCase() === newOfficer.toLowerCase()) return;
+    // Find the matching GD officer by old name
+    const gdOfficer = officers.find(o =>
+      (o.fullName || '').trim().toLowerCase() === prevOfficer.toLowerCase()
+    );
+    if (gdOfficer) {
+      upsertO({ ...gdOfficer, fullName: newOfficer });
+      // Also update PORT Trials
+      portTrials.forEach(t => {
+        if ((t.name || '').trim().toLowerCase() === prevOfficer.toLowerCase()) {
+          upsertPT({ ...t, name: newOfficer });
+        }
+      });
+    }
+  }, [upsertCS, upsertO, upsertPT, officers, portCS, portTrials]);
+
+  // Wrapped PORT Trials upsert — if name changes, sync back to GD and PORT CS
+  const handleUpsertPT = useCallback((t) => {
+    const prev = portTrials.find(x => x.id === t.id);
+    upsertPT(t);
+    const prevName = (prev?.name || '').trim();
+    const newName  = (t.name   || '').trim();
+    if (!prevName || !newName || prevName.toLowerCase() === newName.toLowerCase()) return;
+    // Find the matching GD officer by old name
+    const gdOfficer = officers.find(o =>
+      (o.fullName || '').trim().toLowerCase() === prevName.toLowerCase()
+    );
+    if (gdOfficer) {
+      upsertO({ ...gdOfficer, fullName: newName });
+      // Also update PORT CS
+      portCS.forEach(s => {
+        if ((s.officer || '').trim().toLowerCase() === prevName.toLowerCase()) {
+          upsertCS({ ...s, officer: newName });
+        }
+      });
+    }
+  }, [upsertPT, upsertO, upsertCS, officers, portTrials, portCS]);
 
   // JSON export — full backup of all tables
   const handleExport = useCallback(() => {
@@ -286,11 +351,16 @@ export default function App() {
               </div>
               <div style={{padding:'0 12px 8px',display:'flex',alignItems:'center',gap:8}}>
                 <span style={{color:'#3d526e',fontSize:10,flexShrink:0}}>{c.time}</span>
-                <button onClick={()=>{dismiss();window.location.reload();}}
-                  style={{background:'none',border:'none',color:'#3b82f6',fontSize:10,
-                    cursor:'pointer',padding:0,textDecoration:'underline',flexShrink:0}}>
-                  Reload to see changes
-                </button>
+                {c.pending
+                  ? <span style={{color:'#fbbf24',fontSize:10,flexShrink:0,fontStyle:'italic'}}>
+                      Will reload when you finish typing
+                    </span>
+                  : <button onClick={()=>{dismiss();window.location.reload();}}
+                      style={{background:'none',border:'none',color:'#3b82f6',fontSize:10,
+                        cursor:'pointer',padding:0,textDecoration:'underline',flexShrink:0}}>
+                      Reload to see changes
+                    </button>
+                }
               </div>
               {/* Progress bar showing time until auto-dismiss */}
               <div style={{height:2,background:'#17243a'}}>
@@ -387,8 +457,8 @@ export default function App() {
           search={search} onTransfer={handleTransfer} onTerminate={handleTerminate}/>}
         {tab === 1 && <TransfersTab transfers={transfers} onUpsert={upsertT} onRemove={removeT} search={search}/>}
         {tab === 2 && <TerminationsTab terminations={terminations} onUpsert={upsertTm} onRemove={removeTm} search={search}/>}
-        {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={upsertPT} onRemove={removePT} search={search}/>}
-        {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={upsertCS} onRemove={removeCS} search={search}/>}
+        {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={handleUpsertPT} onRemove={removePT} search={search}/>}
+        {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={handleUpsertCS} onRemove={removeCS} search={search}/>}
         {tab === 5 && <FTOTab ftoOfficers={ftoOfficers} onUpsert={upsertFTO}
           onRemove={id=>{const f=ftoOfficers.find(x=>x.id===id);if(f&&f.isPrevious!=='Y')archiveFTO(f);else removeFTO(id);}}
           onCheckAndAdd={checkAndAddFTO}

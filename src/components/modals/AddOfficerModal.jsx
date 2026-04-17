@@ -1,19 +1,20 @@
 // src/components/modals/AddOfficerModal.jsx
 import { useState } from 'react';
 import { Modal, FRow, Btn, FINP, FSEL } from '../ui.jsx';
-import { RANKS, genId } from '../../lib/utils.js';
+import { RANKS, genId, melbToday } from '../../lib/utils.js';
 
 export function AddOfficerModal({ onClose, onAdd, certs }) {
+  const today = melbToday();
   const [f, setF] = useState({
-    steamName:'', fullName:'', callsign:'-', rank:'Senior Constable',
-    licenseClass:'Silver', divisionJoinDate:'', lastPromotionDate:'',
+    steamName:'', fullName:'', callsign:'-', rank:'Recruit',
+    licenseClass:'Bronze', divisionJoinDate:today, lastPromotionDate:today,
     rankRestriction:'', onLeave:'FALSE',
   });
   const [err, setErr] = useState('');
   const upd = k => e => setF(p => ({ ...p, [k]: e.target.value }));
 
   const submit = () => {
-    if (!f.steamName.trim()) { setErr('Steam name required.'); return; }
+    // Steam name is now optional
     const cv = {};
     certs.forEach(c => { cv[c.id] = ''; });
     onAdd({
@@ -35,7 +36,7 @@ export function AddOfficerModal({ onClose, onAdd, certs }) {
     <Modal title="Add New Officer" onClose={onClose} width={500}>
       {err && <p style={{ color:'#ef4444', fontSize:12, marginBottom:8 }}>{err}</p>}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-        <FRow label="Steam Name">
+        <FRow label="Steam Name (optional)">
           <input style={FINP} value={f.steamName} onChange={upd('steamName')} autoFocus/>
         </FRow>
         <FRow label="Full Name (RP)">
