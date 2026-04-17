@@ -1,0 +1,223 @@
+// src/App.jsx
+// GD Leaders Database — Supabase-backed React app.
+// All state is persisted to Supabase in real time via useDb().
+
+import { useState, useRef, useMemo, useCallback } from 'react';
+import { useDb } from './hooks/useDb.js';
+import { GDTable }          from './components/GDTable.jsx';
+import { TransfersTab }     from './components/TransfersTab.jsx';
+import { TerminationsTab }  from './components/TerminationsTab.jsx';
+import { PortTrialTab }     from './components/PortTrialTab.jsx';
+import { PortCallsignsTab } from './components/PortCallsignsTab.jsx';
+import { FTOTab }           from './components/FTOTab.jsx';
+import { LoginScreen }      from './components/LoginScreen.jsx';
+import { AddOfficerModal }  from './components/modals/AddOfficerModal.jsx';
+import { AddCertModal }     from './components/modals/AddCertModal.jsx';
+import { Btn }              from './components/ui.jsx';
+import { melbToday, genId } from './lib/utils.js';
+
+const AUTH_PW  = import.meta.env.VITE_APP_PASSWORD ?? 'burnbook';
+const APP_NAME = 'GD Leaders Database';
+
+const TABS = [
+  { short: 'GD'          },
+  { short: 'Transfers'   },
+  { short: 'Terminations'},
+  { short: 'PORT Trials' },
+  { short: 'PORT CS'     },
+  { short: 'FTO DB'      },
+];
+
+export default function App() {
+  const [loggedIn,  setLoggedIn]  = useState(false);
+  const [tab,       setTab]       = useState(0);
+  const [search,    setSearch]    = useState('');
+  const [showAddO,  setShowAddO]  = useState(false);
+  const [showAddC,  setShowAddC]  = useState(false);
+  const importRef = useRef(null);
+
+  const [officers,      {upsert: upsertO, upsertMany: upsertManyO, remove: removeO},           oR] = useDb('officers');
+  const [certs,         {upsert: upsertC, upsertMany: upsertManyC, remove: removeC},           cR] = useDb('certs');
+  const [transfers,     {upsert: upsertT, remove: removeT},                                    tR] = useDb('transfers');
+  const [terminations,  {upsert: upsertTm, remove: removeTm},                                  tmR]= useDb('terminations');
+  const [portTrials,    {upsert: upsertPT, remove: removePT},                                  ptR]= useDb('portTrials');
+  const [portCS,        {upsert: upsertCS, remove: removeCS},                                  pcR]= useDb('portCallsigns');
+  const [ftoOfficers,   {upsert: upsertFTO, remove: removeFTO},                                foR]= useDb('ftoOfficers');
+
+  const ready = oR && cR && tR && tmR && ptR && pcR && foR;
+
+  // Sort certs by order
+  const sortedCerts = useMemo(() => [...certs].sort((a, b) => (a.order || 0) - (b.order || 0)), [certs]);
+
+  // Transfer an officer from GD tab (adds transfer record, optionally removes from GD)
+  const handleTransfer = useCallback((o) => {
+    const reason = window.prompt(`Moving "${o.fullName || o.steamName}" — enter destination/reason (cancel to abort):`);
+    if (reason === null) return;
+    const div = (window.prompt('Division transferred to (CIRT / HWY / blank):') ?? '').trim().toUpperCase();
+    upsertT({
+      id: genId(), steamName: o.steamName, fullName: o.fullName,
+      callsign: o.callsign, rank: o.rank, promoDate: o.lastPromotionDate,
+      division: div, notes: reason.trim(),
+      year: new Date().getFullYear().toString(),
+    });
+    if (window.confirm(`Also remove "${o.fullName || o.steamName}" from GD Database?`)) {
+      removeO(o.id);
+    }
+  }, [upsertT, removeO]);
+
+  // JSON export — full backup of all tables
+  const handleExport = useCallback(() => {
+    const data = { officers, certs, transfers, terminations, portTrials, portCS, ftoOfficers };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `gd-leaders-backup-${melbToday()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [officers, certs, transfers, terminations, portTrials, portCS, ftoOfficers]);
+
+  // JSON import — restores a full backup
+  const handleImport = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (!d.officers || !d.certs) { alert('Invalid backup file.'); return; }
+        if (!window.confirm(`Import backup with ${d.officers.length} officers? This replaces ALL current data.`)) return;
+        await upsertManyO(d.officers);
+        await upsertManyC(d.certs);
+        if (d.transfers)    for (const t  of d.transfers)    await upsertT(t);
+        if (d.terminations) for (const t  of d.terminations) await upsertTm(t);
+        if (d.portTrials)   for (const t  of d.portTrials)   await upsertPT(t);
+        if (d.portCS)       for (const s  of d.portCS)       await upsertCS(s);
+        if (d.ftoOfficers)  for (const fo of d.ftoOfficers)  await upsertFTO(fo);
+      } catch { alert('Failed to parse backup file.'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }, [upsertManyO, upsertManyC, upsertT, upsertTm, upsertPT, upsertCS, upsertFTO]);
+
+  // Search badge counts
+  const sq = search.toLowerCase();
+  const tabCounts = useMemo(() => {
+    if (!sq) return {};
+    return {
+      0: officers.filter(o  => [o.steamName,o.fullName,o.callsign].some(v=>(v||'').toLowerCase().includes(sq))).length,
+      1: transfers.filter(t => [t.fullName,t.steamName,t.division,t.rank].some(v=>(v||'').toLowerCase().includes(sq))).length,
+      2: terminations.filter(t=> [t.fullName,t.steamName,t.rank,t.reason].some(v=>(v||'').toLowerCase().includes(sq))).length,
+      3: portTrials.filter(t => [t.name,t.rank].some(v=>(v||'').toLowerCase().includes(sq))).length,
+      4: portCS.filter(s => (s.officer||'').toLowerCase().includes(sq)).length,
+      5: ftoOfficers.filter(o=> [o.fullName,o.rank,o.division].some(v=>(v||'').toLowerCase().includes(sq))).length,
+    };
+  }, [sq, officers, transfers, terminations, portTrials, portCS, ftoOfficers]);
+
+  const olCount  = officers.filter(o => o.onLeave === 'TRUE').length;
+  const hwCount  = officers.filter(o => o.hoursWarning && o.hoursWarning !== 'No' && o.hoursWarning !== '').length;
+
+  const T = {
+    bg:'#07090f',nav:'#0b0f1a',card:'#0f1525',border:'#17243a',borderMid:'#1e3050',
+    accent:'#3b82f6',text:'#d8e4f0',muted:'#3d526e',hint:'#5a7a9a',
+  };
+
+  if (!loggedIn) return <LoginScreen onLogin={() => setLoggedIn(true)} authPw={AUTH_PW} appName={APP_NAME}/>;
+  if (!ready)    return (
+    <div style={{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',color:T.hint,fontSize:14}}>
+      Connecting to database…
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:'100vh',background:T.bg,fontFamily:'system-ui,-apple-system,sans-serif',color:T.text,display:'flex',flexDirection:'column'}}>
+
+      {/* ── HEADER ── */}
+      <div style={{position:'sticky',top:0,zIndex:500,background:T.nav,borderBottom:`1px solid ${T.border}`}}>
+
+        {/* Row 1: logo · search · summary · logout */}
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px',flexWrap:'wrap',minHeight:44,borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+            <div style={{width:28,height:28,background:'#1e3a8a',borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#bfdbfe" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{fontWeight:800,fontSize:12,letterSpacing:'0.06em',color:T.text,lineHeight:1}}>{APP_NAME}</div>
+              <div style={{fontSize:8,color:T.muted,letterSpacing:'0.1em'}}>SUPABASE · v5.2</div>
+            </div>
+          </div>
+
+          <div style={{position:'relative',flex:'1 1 160px',maxWidth:280,minWidth:130}}>
+            <span style={{position:'absolute',left:8,top:'50%',transform:'translateY(-50%)',color:T.muted,fontSize:12,pointerEvents:'none'}}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search all tabs…"
+              style={{background:'#060d1a',border:`1px solid ${T.border}`,borderRadius:5,color:T.text,padding:'5px 10px 5px 26px',fontSize:12,width:'100%',outline:'none'}}/>
+            {search && <button onClick={() => setSearch('')}
+              style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:14,lineHeight:1}}>×</button>}
+          </div>
+
+          <div style={{flexShrink:0,fontSize:11,color:T.hint,background:'#060a14',border:`1px solid ${T.border}`,borderRadius:4,padding:'3px 9px',display:'flex',gap:8,whiteSpace:'nowrap'}}>
+            <span>Officers: <strong style={{color:T.text}}>{officers.length}</strong></span>
+            <span style={{color:T.borderMid}}>|</span>
+            <span>Leave: <strong style={{color:'#fbbf24'}}>{olCount}</strong></span>
+            <span style={{color:T.borderMid}}>|</span>
+            <span>HW: <strong style={{color:'#fb923c'}}>{hwCount}</strong></span>
+            <span style={{color:T.borderMid}}>|</span>
+            <span>FTO: <strong style={{color:'#a78bfa'}}>{ftoOfficers.length}</strong></span>
+          </div>
+          <button onClick={() => setLoggedIn(false)}
+            style={{background:'none',border:'none',cursor:'pointer',color:T.muted,fontSize:11,marginLeft:'auto',flexShrink:0}}>
+            Logout
+          </button>
+        </div>
+
+        {/* Row 2: tabs · action buttons */}
+        <div style={{display:'flex',alignItems:'center',padding:'0 14px',overflowX:'auto',minHeight:40}}>
+          {TABS.map((tb, i) => {
+            const cnt = tabCounts[i] || 0;
+            const isActive = tab === i;
+            return (
+              <button key={i} onClick={() => setTab(i)}
+                style={{background:'none',border:'none',borderBottom:`2px solid ${isActive ? T.accent : 'transparent'}`,
+                  cursor:'pointer',padding:'0 12px',height:40,fontSize:11,fontWeight:600,
+                  color:isActive ? T.accent : T.hint,display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
+                {tb.short}
+                {cnt > 0 && <span style={{background:T.accent,color:'#fff',borderRadius:10,padding:'1px 5px',fontSize:9,fontWeight:700,minWidth:16,textAlign:'center'}}>{cnt}</span>}
+              </button>
+            );
+          })}
+          <div style={{marginLeft:'auto',display:'flex',gap:5,alignItems:'center',paddingLeft:12,flexShrink:0}}>
+            {tab === 0 && <>
+              <Btn size="sm" variant="success" style={{minWidth:76}} onClick={() => setShowAddO(true)}>+ Officer</Btn>
+              <Btn size="sm" variant="ghost"   style={{minWidth:60}} onClick={() => setShowAddC(true)}>+ Cert</Btn>
+            </>}
+            <Btn size="sm" variant="ghost" style={{minWidth:68}} onClick={handleExport}>⬇ Export</Btn>
+            <Btn size="sm" variant="ghost" style={{minWidth:68}} onClick={() => importRef.current?.click()}>⬆ Import</Btn>
+            <input ref={importRef} type="file" accept=".json" style={{display:'none'}} onChange={handleImport}/>
+          </div>
+        </div>
+      </div>
+
+      {/* ── TAB CONTENT ── */}
+      <div style={{flex:1,overflow:'hidden'}}>
+        {tab === 0 && <GDTable officers={officers} certs={sortedCerts}
+          onUpsertOfficer={upsertO} onRemoveOfficer={removeO}
+          onUpsertCert={upsertC} onRemoveCert={removeC}
+          search={search} onTransfer={handleTransfer}/>}
+        {tab === 1 && <TransfersTab transfers={transfers} onUpsert={upsertT} onRemove={removeT} search={search}/>}
+        {tab === 2 && <TerminationsTab terminations={terminations} onUpsert={upsertTm} onRemove={removeTm} search={search}/>}
+        {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={upsertPT} onRemove={removePT} search={search}/>}
+        {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={upsertCS} onRemove={removeCS} search={search}/>}
+        {tab === 5 && <FTOTab ftoOfficers={ftoOfficers} onUpsert={upsertFTO} onRemove={removeFTO} search={search}/>}
+      </div>
+
+      {showAddO && <AddOfficerModal certs={sortedCerts}
+        onClose={() => setShowAddO(false)}
+        onAdd={o => { upsertO(o); setShowAddO(false); }}/>}
+      {showAddC && <AddCertModal
+        onClose={() => setShowAddC(false)}
+        onAdd={c => { const mo = Math.max(...certs.map(x => x.order || 0), 0); upsertC({...c, order: mo+1}); setShowAddC(false); }}/>}
+    </div>
+  );
+}

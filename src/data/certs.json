@@ -1,0 +1,50 @@
+[
+  {
+    "id": "fto",
+    "name": "FTO",
+    "fullName": "Field Training Officer (inc. SFTO)",
+    "order": 1
+  },
+  {
+    "id": "airwing",
+    "name": "Airwing",
+    "fullName": "Airwing",
+    "order": 2
+  },
+  {
+    "id": "rcv",
+    "name": "RCV",
+    "fullName": "RCV",
+    "order": 3
+  },
+  {
+    "id": "port",
+    "name": "PORT",
+    "fullName": "PORT",
+    "order": 4
+  },
+  {
+    "id": "k9",
+    "name": "K9",
+    "fullName": "K9",
+    "order": 5
+  },
+  {
+    "id": "ciu",
+    "name": "CIU",
+    "fullName": "CIU",
+    "order": 6
+  },
+  {
+    "id": "cso",
+    "name": "CSO",
+    "fullName": "CSO",
+    "order": 7
+  },
+  {
+    "id": "oc",
+    "name": "OC",
+    "fullName": "OC Spray",
+    "order": 8
+  }
+]
