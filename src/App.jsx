@@ -49,6 +49,63 @@ export default function App() {
   // Sort certs by order
   const sortedCerts = useMemo(() => [...certs].sort((a, b) => (a.order || 0) - (b.order || 0)), [certs]);
 
+  // ─── FTO SYNC ────────────────────────────────────────────────────────────────
+  // Any certValues.fto value other than N or empty means the officer has an FTO cert
+  const FTO_ACTIVE = new Set(['Y','TL','2IC','TO','SFTO','FPO','TP','OPs']);
+
+  const ftoLevelFromCert = (val) => {
+    if (val === 'TL' || val === '2IC') return 'FTO Leader';
+    if (val === 'SFTO')               return 'Senior FTO';
+    return 'FTO';
+  };
+
+  // Wrapped officer upsert — syncs FTO cert grants/removals and rank changes into FTO DB
+  const handleUpsertOfficer = useCallback((updated) => {
+    upsertO(updated);
+    const prev        = officers.find(o => o.id === updated.id);
+    const prevFtoCert = prev?.certValues?.fto ?? '';
+    const newFtoCert  = updated.certValues?.fto ?? '';
+    const hadFTO      = FTO_ACTIVE.has(prevFtoCert);
+    const hasFTO      = FTO_ACTIVE.has(newFtoCert);
+    const existingFTO = ftoOfficers.find(f => f.fullName === updated.fullName);
+
+    if (hasFTO && !existingFTO) {
+      // FTO cert granted — add to FTO DB
+      upsertFTO({
+        id: genId(), fullName: updated.fullName, rank: updated.rank,
+        division: 'GD', ftoLevel: ftoLevelFromCert(newFtoCert),
+        isFTO: 'Y',
+        isSFTO: (newFtoCert === 'SFTO' || newFtoCert === 'TL' || newFtoCert === '2IC') ? 'Y' : 'N',
+        isAcademyTrainer: 'N', isInductionHost: 'N', isSupervisor: 'N', isLeader: 'N',
+      });
+    } else if (!hasFTO && hadFTO && existingFTO) {
+      // FTO cert removed — remove from FTO DB
+      removeFTO(existingFTO.id);
+    } else if (hasFTO && existingFTO) {
+      // Already in FTO DB — sync rank and/or level if changed
+      const rankChanged  = existingFTO.rank !== updated.rank;
+      const certChanged  = newFtoCert !== prevFtoCert;
+      const levelChanged = certChanged && ftoLevelFromCert(newFtoCert) !== existingFTO.ftoLevel;
+      if (rankChanged || levelChanged) {
+        upsertFTO({
+          ...existingFTO,
+          rank:     updated.rank,
+          ftoLevel: levelChanged ? ftoLevelFromCert(newFtoCert) : existingFTO.ftoLevel,
+        });
+      }
+    }
+  }, [upsertO, upsertFTO, removeFTO, officers, ftoOfficers]);
+
+  // Wrapped officer remove — also removes from FTO DB if present
+  const handleRemoveOfficer = useCallback((id) => {
+    const o = officers.find(x => x.id === id);
+    removeO(id);
+    if (o) {
+      const existingFTO = ftoOfficers.find(f => f.fullName === o.fullName);
+      if (existingFTO) removeFTO(existingFTO.id);
+    }
+  }, [removeO, removeFTO, officers, ftoOfficers]);
+
   // Transfer an officer from GD tab (adds transfer record, optionally removes from GD)
   const handleTransfer = useCallback((o) => {
     const reason = window.prompt(`Moving "${o.fullName || o.steamName}" — enter destination/reason (cancel to abort):`);
@@ -202,7 +259,7 @@ export default function App() {
       {/* ── TAB CONTENT ── */}
       <div style={{flex:1,overflow:'hidden'}}>
         {tab === 0 && <GDTable officers={officers} certs={sortedCerts}
-          onUpsertOfficer={upsertO} onRemoveOfficer={removeO}
+          onUpsertOfficer={handleUpsertOfficer} onRemoveOfficer={handleRemoveOfficer}
           onUpsertCert={upsertC} onRemoveCert={removeC}
           search={search} onTransfer={handleTransfer}/>}
         {tab === 1 && <TransfersTab transfers={transfers} onUpsert={upsertT} onRemove={removeT} search={search}/>}
@@ -214,7 +271,7 @@ export default function App() {
 
       {showAddO && <AddOfficerModal certs={sortedCerts}
         onClose={() => setShowAddO(false)}
-        onAdd={o => { upsertO(o); setShowAddO(false); }}/>}
+        onAdd={o => { handleUpsertOfficer(o); setShowAddO(false); }}/>}
       {showAddC && <AddCertModal
         onClose={() => setShowAddC(false)}
         onAdd={c => { const mo = Math.max(...certs.map(x => x.order || 0), 0); upsertC({...c, order: mo+1}); setShowAddC(false); }}/>}
