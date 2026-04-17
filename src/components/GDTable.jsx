@@ -1,5 +1,5 @@
 // src/components/GDTable.jsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { T, TxtCell, DropCell, DateCell, CvBadge, RankBadge, Btn } from './ui.jsx';
 import {
   RANKS, RANK_ORDER, RANK_META, TIER_ROW, promoColor,
@@ -19,7 +19,7 @@ import {
 export function GDTable({officers,certs,onUpsertOfficer,onRemoveOfficer,onUpsertCert,onRemoveCert,search,onTransfer,onTerminate}){
 const[active,setActive]=useState(null);
 const[openMenu,setOpenMenu]=useState(null);
-const[menuPos,setMenuPos]=useState({top:0,left:0});
+const menuPos=useRef({top:0,left:0});
 const isA=(id,col)=>active?.id===id&&active?.col===col;
 const act=(id,col)=>setActive({id,col});
 const deact=()=>setActive(null);
@@ -71,10 +71,10 @@ rows.push(<tr key={o.id} style={{background:bg,opacity:isOL?0.5:1}} onMouseEnter
 <td style={{...tdB,minWidth:CW.ol,width:CW.ol}}><DropCell value={o.onLeave||""} options={BOOL_OPTS} isActive={isA(o.id,"ol")} onActivate={()=>act(o.id,"ol")} onDone={v=>{updO(o.id,"onLeave",v);deact();}}><span style={{fontSize:12,fontWeight:700,color:isOL?"#fbbf24":"#22c55e"}}>{isOL?"Yes":"No"}</span></DropCell></td>
 <td style={{...tdB,minWidth:CW.del,width:CW.del,textAlign:"center",position:"relative"}}>
   <button
-    onClick={e=>{if(openMenu===o.id){setOpenMenu(null);return;}const r=e.currentTarget.getBoundingClientRect();setMenuPos({top:r.bottom+4,left:Math.min(r.right-160,window.innerWidth-168)});setOpenMenu(o.id);}}
+    onClick={e=>{if(openMenu===o.id){setOpenMenu(null);return;}const r=e.currentTarget.getBoundingClientRect();menuPos.current={top:r.bottom+4,left:Math.min(r.left-120,window.innerWidth-168)};setOpenMenu(o.id);}}
     title="Actions"
     style={{background:"none",border:"none",cursor:"pointer",color:T.hint,fontSize:15,padding:"2px 6px",lineHeight:1,fontWeight:700,letterSpacing:"0.1em"}}>⋮</button>
-  {openMenu===o.id&&<div style={{position:"fixed",zIndex:9999,top:menuPos.top,left:menuPos.left,background:"#0f1a2e",border:`1px solid ${T.borderMid}`,borderRadius:6,boxShadow:"0 4px 16px rgba(0,0,0,0.6)",minWidth:160,overflow:"hidden"}}
+  {openMenu===o.id&&<div style={{position:"fixed",zIndex:9999,top:menuPos.current.top,left:menuPos.current.left,background:"#0f1a2e",border:`1px solid ${T.borderMid}`,borderRadius:6,boxShadow:"0 4px 16px rgba(0,0,0,0.6)",minWidth:160,overflow:"hidden"}}
     onMouseLeave={()=>setOpenMenu(null)}>
     <div style={{padding:"4px 12px",fontSize:9,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:`1px solid ${T.border}`}}>{o.fullName||o.steamName}</div>
     <button onClick={()=>{setOpenMenu(null);onTransfer(o);}}
