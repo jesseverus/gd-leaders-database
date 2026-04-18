@@ -67,8 +67,35 @@ export function DropCell({ value, options, isActive, onActivate, onDone, childre
 
 export function DateCell({ value, isActive, onActivate, onDone, display }) {
   const ref = useRef(null);
-  useEffect(() => { if (isActive && ref.current) ref.current.focus(); }, [isActive]);
-  if (isActive) return <input ref={ref} type="date" value={value || ''} onChange={e => onDone(e.target.value)} onBlur={() => onDone(value || '')} style={{...BASE_INP,padding:'1px 2px',fontSize:11}}/>;
+  const [local, setLocal] = useState(value || '');
+  useEffect(() => {
+    if (isActive) {
+      setLocal(value || '');
+      if (ref.current) ref.current.focus();
+    }
+  }, [isActive]);
+  const commit = () => { onDone(local || value || ''); };
+  const cancel = () => { onDone(value || ''); }; // dismiss without saving
+  if (isActive) return (
+    <div style={{display:'flex',alignItems:'center',gap:3,padding:'1px 2px'}}>
+      <input ref={ref} type="date" value={local}
+        onChange={e => setLocal(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          e.stopPropagation();
+        }}
+        style={{...BASE_INP,padding:'1px 2px',fontSize:11,flex:1}}/>
+      <button onClick={commit}
+        style={{background:'#14532d',border:'none',borderRadius:3,color:'#bbf7d0',
+          fontSize:9,padding:'2px 5px',cursor:'pointer',fontWeight:700,flexShrink:0,lineHeight:1.4}}>
+        OK
+      </button>
+      <button onClick={cancel}
+        style={{background:'none',border:'none',color:'#3d526e',fontSize:12,
+          cursor:'pointer',lineHeight:1,flexShrink:0,padding:'1px'}}>×</button>
+    </div>
+  );
   return <div onClick={onActivate} style={{cursor:'pointer',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:'1px 3px',minHeight:26}}>
     {display ?? <span style={{fontSize:12,color:value?T.hint:T.muted}}>{fmtShort(value)||'—'}</span>}
   </div>;
