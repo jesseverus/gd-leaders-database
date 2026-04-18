@@ -549,8 +549,8 @@ export default function App() {
         {/* Row 2: tabs · action buttons */}
         <div style={{display:'flex',alignItems:'center',padding:'0 14px',overflowX:'auto',minHeight:40}}>
           {TABS.map((tb, i) => {
-            // Hide Users tab for non-admins
-            if (i === 8 && !isAdmin) return null;
+            // Hide Audit Log, Backups, Users tabs for non-admins
+            if ((i === 6 || i === 7 || i === 8) && !isAdmin) return null;
             const cnt = tabCounts[i] || 0;
             const isActive = tab === i;
             return (
@@ -587,8 +587,8 @@ export default function App() {
         {tab === 2 && <TerminationsTab terminations={terminations} onUpsert={upsertTm} onRemove={removeTm} search={search}/>}
         {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={handleUpsertPT} onRemove={removePT} search={search}/>}
         {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={handleUpsertCS} onRemove={removeCS} search={search}/>}
-        {tab === 6 && <AuditLogTab search={search}/>}
-        {tab === 7 && <BackupsPanel backup={backup} data={backupData}/>}
+        {tab === 6 && isAdmin && <AuditLogTab search={search}/>}
+        {tab === 7 && isAdmin && <BackupsPanel backup={backup} data={backupData}/>}
         {tab === 8 && isAdmin && <UserManagementTab auth={auth}/>}
         {tab === 8 && !isAdmin && (
           <div style={{padding:32,textAlign:'center',color:T.muted,fontSize:13}}>
