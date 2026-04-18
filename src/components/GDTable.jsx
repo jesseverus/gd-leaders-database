@@ -61,6 +61,139 @@ const certOpts=cid=>cid==="port"?PORT_OPTS.map(v=>({value:v,label:v||"—"})):CV
 const totalCols=5+certs.length+10;
 
 
+const PromotionModal=()=>{
+  if(!promoModal)return null;
+  const{officers:dueList,ignored,decided,step}=promoModal;
+  const remaining=dueList.filter(o=>!ignored.has(o.id)&&!decided.find(d=>d.officer.id===o.id));
+  const current=remaining[0];
+  const T2=T; // alias
+
+  if(step==='confirm'){
+    return(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
+        <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,width:"100%",maxWidth:480,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #17243a",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14}}>Confirm Promotions</div>
+            <button onClick={()=>setPromoModal(null)} style={{background:"none",border:"none",color:"#3d526e",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+          </div>
+          <div style={{padding:16}}>
+            {decided.length===0
+              ? <div style={{color:"#5a7a9a",fontSize:13,textAlign:"center",padding:"12px 0"}}>No promotions selected.</div>
+              : <>
+                <div style={{fontSize:11,color:"#5a7a9a",marginBottom:12}}>{decided.length} officer{decided.length!==1?"s":""} to be promoted:</div>
+                {decided.map(({officer:o,newRank})=>(
+                  <div key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",background:"#060d1a",borderRadius:5,marginBottom:5}}>
+                    <span style={{color:"#d8e4f0",fontWeight:700,fontSize:12,flex:1}}>{o.fullName||o.steamName}</span>
+                    <span style={{color:"#9ca3af",fontSize:11}}>{o.rank}</span>
+                    <span style={{color:"#5a7a9a",fontSize:11}}>→</span>
+                    <span style={{color:"#22c55e",fontSize:11,fontWeight:700}}>{newRank}</span>
+                  </div>
+                ))}
+              </>
+            }
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
+              <button onClick={()=>setPromoModal(p=>({...p,step:"review"}))} style={{background:"none",border:"1px solid #17243a",borderRadius:5,color:"#5a7a9a",fontSize:11,padding:"5px 12px",cursor:"pointer"}}>Back</button>
+              {decided.length>0&&<button onClick={()=>{
+                const today=new Date().toLocaleDateString("en-CA",{timeZone:"Australia/Melbourne"});
+                decided.forEach(({officer:o,newRank})=>{
+                  onUpsertOfficer({...o,rank:newRank,lastPromotionDate:today});
+                });
+                setPromoModal(p=>({...p,step:"done"}));
+              }} style={{background:"#14532d",border:"none",borderRadius:5,color:"#bbf7d0",fontSize:11,padding:"5px 14px",cursor:"pointer",fontWeight:700}}>
+                Confirm {decided.length} Promotion{decided.length!==1?"s":""}
+              </button>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if(step==="done"){
+    return(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
+        <div style={{background:"#0f1a2e",border:"1px solid #14532d",borderRadius:10,width:"100%",maxWidth:400,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+          <div style={{padding:"24px 20px",textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{color:"#bbf7d0",fontWeight:700,fontSize:15,marginBottom:6}}>{decided.length} Promotion{decided.length!==1?"s":""} Complete</div>
+            <div style={{color:"#5a7a9a",fontSize:12,marginBottom:16}}>Last Promotion Date has been updated for all promoted officers.</div>
+            <button onClick={()=>setPromoModal(null)} style={{background:"#1e3a8a",border:"none",borderRadius:5,color:"#bfdbfe",fontSize:12,padding:"7px 20px",cursor:"pointer",fontWeight:700}}>Done</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // step === "review" — show one officer at a time
+  if(!current){
+    // All processed — go to confirm
+    return(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
+        <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,width:"100%",maxWidth:400,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+          <div style={{padding:"16px 20px",textAlign:"center"}}>
+            <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14,marginBottom:8}}>All officers reviewed</div>
+            <div style={{color:"#5a7a9a",fontSize:12,marginBottom:14}}>{decided.length} promotion{decided.length!==1?"s":""} selected · {ignored.size} ignored</div>
+            <div style={{display:"flex",justifyContent:"center",gap:8}}>
+              <button onClick={()=>setPromoModal(null)} style={{background:"none",border:"1px solid #17243a",borderRadius:5,color:"#5a7a9a",fontSize:11,padding:"5px 12px",cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>setPromoModal(p=>({...p,step:"confirm"}))} style={{background:"#1e3a8a",border:"none",borderRadius:5,color:"#bfdbfe",fontSize:11,padding:"5px 14px",cursor:"pointer",fontWeight:700}}>Review & Confirm →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const newRank=NEXT_RANK[current.rank]||current.rank;
+  const d=daysSince(current.lastPromotionDate);
+  const daysText=d!==null?`${d} days since last promotion`:"No promotion date recorded";
+  const progressPct=Math.min(100,Math.round(((dueList.indexOf(current)+1)/dueList.length)*100));
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
+      <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,width:"100%",maxWidth:440,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        {/* Progress */}
+        <div style={{height:3,background:"#17243a"}}>
+          <div style={{height:"100%",background:"#3b82f6",width:`${progressPct}%`,transition:"width 0.3s"}}/>
+        </div>
+        <div style={{padding:"12px 16px",borderBottom:"1px solid #17243a",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14}}>Due for Promotion</div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{color:"#5a7a9a",fontSize:11}}>{dueList.indexOf(current)+1} of {dueList.length}</span>
+            <button onClick={()=>setPromoModal(null)} style={{background:"none",border:"none",color:"#3d526e",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+          </div>
+        </div>
+        <div style={{padding:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+            <div style={{width:44,height:44,background:"#1e3050",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style={{color:"#93c5fd",fontSize:13,fontWeight:800}}>{(current.fullName||"?").slice(0,2).toUpperCase()}</span>
+            </div>
+            <div>
+              <div style={{color:"#d8e4f0",fontWeight:700,fontSize:15}}>{current.fullName||current.steamName}</div>
+              <div style={{color:"#5a7a9a",fontSize:11}}>{daysText}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#060d1a",borderRadius:7,marginBottom:16}}>
+            <span style={{fontSize:12,color:"#9ca3af"}}>{current.rank}</span>
+            <span style={{color:"#3b82f6",fontSize:16}}>→</span>
+            <span style={{fontSize:13,color:"#22c55e",fontWeight:700}}>{newRank}</span>
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button onClick={()=>setPromoModal(p=>({...p,ignored:new Set([...p.ignored,current.id])}))}
+              style={{background:"none",border:"1px solid #374151",borderRadius:5,color:"#9ca3af",fontSize:12,padding:"7px 16px",cursor:"pointer"}}>
+              Ignore
+            </button>
+            <button onClick={()=>setPromoModal(p=>({...p,decided:[...p.decided,{officer:current,newRank}]}))}
+              style={{background:"#14532d",border:"none",borderRadius:5,color:"#bbf7d0",fontSize:12,padding:"7px 16px",cursor:"pointer",fontWeight:700}}>
+              Promote →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const ActionModal=()=>{
   const o=openMenu;
   if(!o)return null;
@@ -128,7 +261,6 @@ const HEADER_ROW1_H=22;
 const HEADER_ROW2_H=28;
 
 // ── Due-for-Promotion filter ──────────────────────────────────────────────────
-const[showDuePromo,setShowDuePromo]=useState(false);
 const PROMO_THRESHOLD_DAYS=3; // show if within 3 days of, or past, promo date
 // We need to know each officer's promo-due days; use daysUntilPromo from utils if available,
 // otherwise derive from promoColor: promoColor returns a non-muted colour when close/overdue.
@@ -136,14 +268,27 @@ const PROMO_THRESHOLD_DAYS=3; // show if within 3 days of, or past, promo date
 // Since we don't have rank thresholds exported, we'll use promoColor returning non-grey as the signal.
 // Actually the safest approach: expose the raw days and let promoColor signal urgency.
 // We'll flag an officer as "due" if promoColor returns a warning/danger colour (not the default muted).
-const SAFE_COLORS=new Set(["#94a3b8","#64748b",T.muted,"#6b7280"]);
+// Ranks eligible for promotion tracking (Recruit → First Constable only)
+const PROMO_ELIGIBLE=new Set(['Recruit','Probationary Constable','Constable','First Constable']);
+const NEXT_RANK={
+  'Recruit':'Probationary Constable',
+  'Probationary Constable':'Constable',
+  'Constable':'First Constable',
+  'First Constable':'Senior Constable',
+};
 const isDueForPromo=(o)=>{
+  if(!PROMO_ELIGIBLE.has(o.rank))return false;
   const d=daysSince(o.lastPromotionDate);
   if(d===null||d===undefined)return false;
+  // Use promoColor — returns non-muted when due/overdue
   const col=promoColor(o.rank,d);
-  return !SAFE_COLORS.has(col);
+  return col==='#fbbf24'||col==='#ef4444'; // warning or danger only
 };
 const dueOfficers=sorted.filter(isDueForPromo);
+
+// Promotion modal state
+const[promoModal,setPromoModal]=useState(null);
+// null | {officers:[...], ignored:Set, decided:[{officer,newRank}], step:'review'|'confirm'|'done'}
 
 // ── Collapsible rank groups ───────────────────────────────────────────────────
 const[collapsedRanks,setCollapsedRanks]=useState(new Set());
@@ -151,7 +296,7 @@ const toggleRank=(rank)=>setCollapsedRanks(prev=>{const n=new Set(prev);n.has(ra
 
 // Re-build rows with collapsible rank headers
 const collapsibleRows=[];let lastRank2=null;let ri2=0;
-const displayList=showDuePromo?dueOfficers:sorted;
+const displayList=sorted; // promotion review is now via modal, not filter
 displayList.forEach(o=>{
   if(o.rank!==lastRank2){lastRank2=o.rank;ri2=0;
     const rm=GD_RANK_META[o.rank]||{bg:"#374151",fg:"#d1d5db"};
@@ -221,12 +366,14 @@ return<div style={{position:'relative'}}>
 </div>
 )}
 <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 10px 6px"}}>
-  <button onClick={()=>setShowDuePromo(p=>!p)} style={{display:"flex",alignItems:"center",gap:6,background:showDuePromo?"#5b21b6":"#0f1a2e",border:`1px solid ${showDuePromo?"#7c3aed":T.borderMid}`,borderRadius:5,color:showDuePromo?"#e9d5ff":"#a78bfa",fontSize:11,fontWeight:700,padding:"5px 12px",cursor:"pointer",transition:"all 0.15s"}}>
+  <button onClick={()=>{
+    if(dueOfficers.length===0)return;
+    setPromoModal({officers:dueOfficers,ignored:new Set(),decided:[],step:"review"});
+  }} style={{display:"flex",alignItems:"center",gap:6,background:promoModal?"#5b21b6":"#0f1a2e",border:`1px solid ${promoModal?"#7c3aed":T.borderMid}`,borderRadius:5,color:promoModal?"#e9d5ff":"#a78bfa",fontSize:11,fontWeight:700,padding:"5px 12px",cursor:"pointer",transition:"all 0.15s",opacity:dueOfficers.length===0?0.4:1}}>
     <span style={{fontSize:13}}>🎖</span>
     Due for Promotion
-    {dueOfficers.length>0&&<span style={{background:showDuePromo?"rgba(255,255,255,0.2)":"#5b21b6",color:"#e9d5ff",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800,minWidth:18,textAlign:"center"}}>{dueOfficers.length}</span>}
+    {dueOfficers.length>0&&<span style={{background:"#5b21b6",color:"#e9d5ff",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800,minWidth:18,textAlign:"center"}}>{dueOfficers.length}</span>}
   </button>
-  {showDuePromo&&<span style={{color:"#a78bfa",fontSize:11,opacity:0.7}}>Officers at or past their promotion threshold</span>}
 </div>
 <div style={{overflowX:"auto",overflowY:"auto",maxHeight:"calc(100vh - 130px)",borderRadius:7,border:`1px solid ${T.border}`,margin:"0 10px 10px"}}>
 <table style={{borderCollapse:"collapse",width:"max-content",tableLayout:"fixed"}}><thead>
@@ -234,6 +381,6 @@ return<div style={{position:'relative'}}>
 <tr style={{background:T.nav}}><th style={{...th(CW.full,0,true),top:HEADER_ROW1_H,zIndex:7}}>Full Name</th><th style={{...th(CW.steam),top:HEADER_ROW1_H}}>Steam</th><th style={{...th(CW.call),top:HEADER_ROW1_H}}>Callsign</th><th style={{...th(CW.rank),top:HEADER_ROW1_H}}>Rank</th><th style={{...th(CW.lic),top:HEADER_ROW1_H}}>Lic.</th>
 {certs.map(c=><th key={c.id} title={c.fullName} style={{...th(CW.cert),top:HEADER_ROW1_H}}><div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}><span style={{fontSize:9}}>{c.name}</span><button onClick={()=>delC(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#1e3050",fontSize:8,padding:0,lineHeight:1}} onMouseEnter={e=>e.target.style.color=T.danger} onMouseLeave={e=>e.target.style.color="#1e3050"}>×</button></div></th>)}
 <th style={{...th(CW.hw),top:HEADER_ROW1_H}}>Hours Warning</th><th style={{...th(CW.hwdate),top:HEADER_ROW1_H}}>HW Date</th><th style={{...th(CW.expret),top:HEADER_ROW1_H}}>Exp. Return</th><th style={{...th(CW.daysrem),top:HEADER_ROW1_H}}>Days Left</th><th style={{...th(CW.misc),top:HEADER_ROW1_H}}>Last Misc.</th><th style={{...th(CW.promo),top:HEADER_ROW1_H}}>Last Promo</th><th style={{...th(CW.since),top:HEADER_ROW1_H}} title="Days since promo ↓">Since ↓</th><th style={{...th(CW.restrict),top:HEADER_ROW1_H}}>Restriction</th><th style={{...th(CW.ol),top:HEADER_ROW1_H}}>Leave</th><th style={{...th(CW.del),top:HEADER_ROW1_H}}/></tr>
-</thead><tbody>{displayList.length===0?<tr><td colSpan={totalCols} style={{padding:32,textAlign:"center",color:T.muted,fontSize:13}}>{showDuePromo?"No officers due for promotion.":(search?"No results.":"No officers.")}</td></tr>:collapsibleRows}</tbody></table><ActionModal/></div></div>;}
+</thead><tbody>{displayList.length===0?<tr><td colSpan={totalCols} style={{padding:32,textAlign:"center",color:T.muted,fontSize:13}}>{search?"No results.":"No officers."}</td></tr>:collapsibleRows}</tbody></table><ActionModal/><PromotionModal/></div></div>;}
 
 // ─── TAB 2: TRANSFERS ─────────────────────────────────────────────────────────

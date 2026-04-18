@@ -12,7 +12,14 @@ const toggleYear=year=>setCollapsed(p=>({...p,[year]:!isCollapsed(year)}));
 const isA=(id,f)=>active?.id===id&&active?.f===f;const act=(id,f)=>setActive({id,f});const deact=()=>setActive(null);
 const sq=search.toLowerCase();
 const filtered=transfers.filter(t=>!sq||[t.fullName,t.steamName,t.rank,t.division].some(v=>(v||"").toLowerCase().includes(sq)));
-const byYear={};filtered.forEach(t=>{const y=t.year||"Unknown";if(!byYear[y])byYear[y]=[];byYear[y].push(t);});
+const byYear={};
+filtered.forEach(t=>{
+  // Derive year from the actual transfer date (promoDate) if available,
+  // fall back to the stored year field, then Unknown
+  const y = t.promoDate ? t.promoDate.slice(0,4) : (t.year||"Unknown");
+  if(!byYear[y])byYear[y]=[];
+  byYear[y].push(t);
+});
 const years=Object.keys(byYear).sort((a,b)=>Number(b)-Number(a));
 const del=id=>{if(window.confirm("Remove transfer record?"))onRemove(id);};
 const updT=(id,f,v)=>{const t=transfers.find(x=>x.id===id);if(t)onUpsert({...t,[f]:v});};

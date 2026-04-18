@@ -35,7 +35,11 @@ const TABS = [
 
 export default function App() {
   const [loggedIn,  setLoggedIn]  = useState(() => sessionStorage.getItem(SESSION_KEY) === '1');
-  const [tab,       setTab]       = useState(0);
+  const [tab, setTab] = useState(() => {
+    const saved = sessionStorage.getItem('gdl_tab');
+    return saved !== null ? parseInt(saved, 10) : 0;
+  });
+  const setTabAndSave = (i) => { sessionStorage.setItem('gdl_tab', i); setTab(i); };
   const [search,    setSearch]    = useState('');
   const [showAddO,  setShowAddO]  = useState(false);
   const [showAddC,  setShowAddC]  = useState(false);
@@ -462,7 +466,7 @@ export default function App() {
             const cnt = tabCounts[i] || 0;
             const isActive = tab === i;
             return (
-              <button key={i} onClick={() => setTab(i)}
+              <button key={i} onClick={() => setTabAndSave(i)}
                 style={{background:'none',border:'none',borderBottom:`2px solid ${isActive ? T.accent : 'transparent'}`,
                   cursor:'pointer',padding:'0 12px',height:40,fontSize:11,fontWeight:600,
                   color:isActive ? T.accent : T.hint,display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
