@@ -68,25 +68,45 @@ export function useRealtimeChanges() {
 
   // ── Typing detection ────────────────────────────────────────────────────────
   useEffect(() => {
+    let blurTimer = null;
+
     const onFocusIn = (e) => {
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        // Cancel any pending blur timer (e.g. clicking date picker calendar)
+        clearTimeout(blurTimer);
         isTyping.current  = true;
         isInModal.current = isInsideModal(e.target);
       }
     };
-    const onFocusOut = () => {
-      isTyping.current  = false;
-      isInModal.current = false;
-      // If a reload was queued while the user was typing, do it now
-      if (pendingReload.current) {
-        pendingReload.current = false;
-        window.location.reload();
-      }
+    const onFocusOut = (e) => {
+      const tag = e.target?.tagName;
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
+      // Use a grace period — date picker popups can briefly steal focus
+      // Without this, clicking the calendar triggers a reload mid-entry
+      const isDate = e.target?.type === 'date';
+      const delay  = isDate ? 3000 : 80; // 3s grace for date pickers (day/month/year navigation)
+      clearTimeout(blurTimer);
+      blurTimer = setTimeout(() => {
+        // Only act if nothing has taken focus back
+        const focused = document.activeElement;
+        const focusedTag = focused?.tagName;
+        if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT') {
+          // Something else has focus — don't clear typing state
+          return;
+        }
+        isTyping.current  = false;
+        isInModal.current = false;
+        if (pendingReload.current) {
+          pendingReload.current = false;
+          window.location.reload();
+        }
+      }, delay);
     };
     document.addEventListener('focusin',  onFocusIn,  true);
     document.addEventListener('focusout', onFocusOut, true);
     return () => {
+      clearTimeout(blurTimer);
       document.removeEventListener('focusin',  onFocusIn,  true);
       document.removeEventListener('focusout', onFocusOut, true);
     };
