@@ -24,14 +24,21 @@ const GD_TIER_ROW     = { ...TIER_ROW,  awaiting: { even:"#0d131d", odd:"#0f1520
 //   search                  — search string
 //   onTransfer(o)           — called when → is clicked
 
-export function GDTable({officers,certs,onUpsertOfficer,onRemoveOfficer,onUpsertCert,onRemoveCert,search,onTransfer,onTerminate}){
+export function GDTable({officers,certs,onUpsertOfficer,onRemoveOfficer,onUpsertCert,onRemoveCert,search,onTransfer,onTerminate,onCellFocus,onCellBlur,isLockedByOther,lockedBy}){
 const[active,setActive]=useState(null);
 const[openMenu,setOpenMenu]=useState(null);
 const[rankUndo,setRankUndo]=useState(null); // {id,prevRank,prevPromo,timer}
 
 const isA=(id,col)=>active?.id===id&&active?.col===col;
-const act=(id,col)=>setActive({id,col});
-const deact=()=>setActive(null);
+const act=(id,col)=>{
+  if(active?.id && active.id!==id) onCellBlur?.(active.id);
+  setActive({id,col});
+  onCellFocus?.(id);
+};
+const deact=(id)=>{
+  setActive(null);
+  onCellBlur?.(id);
+};
 const updO=(id,f,v)=>{const o=officers.find(x=>x.id===id);if(o)onUpsertOfficer({...o,[f]:v});};
 const updCV=(id,cid,v)=>{const o=officers.find(x=>x.id===id);if(o)onUpsertOfficer({...o,certValues:{...o.certValues,[cid]:v}});};
 const delO=id=>{if(window.confirm(`Remove officer?`))onRemoveOfficer(id);};
@@ -56,7 +63,7 @@ const CW={full:155,steam:124,call:72,rank:158,lic:60,cert:44,hw:88,hwdate:72,exp
 const thB={background:T.nav,color:T.hint,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",borderRight:`1px solid ${T.border}`,borderBottom:`2px solid ${T.borderMid}`,padding:"5px 3px",textAlign:"center",whiteSpace:"nowrap",position:"sticky",top:0,zIndex:4};
 const th=(w,sl,sticky)=>({...thB,minWidth:w,width:w,...(sticky?{position:"sticky",left:sl,zIndex:6,top:0}:{})});
 const tdB={border:`1px solid ${T.border}`,padding:0,verticalAlign:"middle"};
-const tdS=(bg)=>({...tdB,position:"sticky",left:0,background:bg,zIndex:2,minWidth:CW.full,width:CW.full});
+const tdS=(bg)=>({...tdB,position:"sticky",left:0,background:bg,zIndex:2,minWidth:CW.full,width:CW.full,overflow:"visible"});
 const certOpts=cid=>cid==="port"?PORT_OPTS.map(v=>({value:v,label:v||"—"})):CV_OPTS.map(v=>({value:v,label:v||"—"}));
 const totalCols=5+certs.length+10;
 
@@ -436,21 +443,27 @@ displayList.forEach(o=>{
   const dRem=daysUntil(o.expectedReturn);
   const dRemCol=dRem===null?T.muted:dRem<0?"#ef4444":dRem<=3?"#fbbf24":"#22c55e";
   collapsibleRows.push(<tr key={o.id} style={{background:bg,opacity:isOL?0.5:1}} onMouseEnter={e=>e.currentTarget.style.filter="brightness(1.28)"} onMouseLeave={e=>e.currentTarget.style.filter=""}>
-<td style={tdS(bg)}><TxtCell value={o.fullName} isActive={isA(o.id,"full")} onActivate={()=>act(o.id,"full")} onChange={v=>updO(o.id,"fullName",v)} onDone={deact}/></td>
-<td style={{...tdB,minWidth:CW.steam,width:CW.steam}}><TxtCell value={o.steamName} mono isActive={isA(o.id,"steam")} onActivate={()=>act(o.id,"steam")} onChange={v=>updO(o.id,"steamName",v)} onDone={deact}/></td>
-<td style={{...tdB,minWidth:CW.call,width:CW.call,...(isDup?{boxShadow:"inset 0 0 0 2px #ef4444"}:{})}}><TxtCell value={o.callsign} mono align="center" isActive={isA(o.id,"call")} onActivate={()=>act(o.id,"call")} onChange={v=>updO(o.id,"callsign",v)} onDone={deact}/></td>
-<td style={{...tdB,minWidth:CW.rank,width:CW.rank}}><DropCell value={o.rank} options={GD_RANKS.map(r=>({value:r,label:r}))} isActive={isA(o.id,"rank")} onActivate={()=>act(o.id,"rank")} onDone={v=>{handleRankChange(o,v);deact();}}><RankBadge rank={o.rank}/></DropCell></td>
-<td style={{...tdB,minWidth:CW.lic,width:CW.lic}}><DropCell value={o.licenseClass} options={["Gold","Silver","Bronze",""].map(v=>({value:v,label:v||"—"}))} isActive={isA(o.id,"lic")} onActivate={()=>act(o.id,"lic")} onDone={v=>{updO(o.id,"licenseClass",v);deact();}}><span style={{background:licM.bg,color:licM.fg,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700}}>{o.licenseClass||"—"}</span></DropCell></td>
-{certs.map(cert=>{const cv=o.certValues?.[cert.id]||"";return<td key={cert.id} style={{...tdB,minWidth:CW.cert,width:CW.cert}} title={cert.fullName}><DropCell value={cv} options={certOpts(cert.id)} isActive={isA(o.id,`cv_${cert.id}`)} onActivate={()=>act(o.id,`cv_${cert.id}`)} onDone={v=>{updCV(o.id,cert.id,v);deact();}}><CvBadge val={cv}/></DropCell></td>;})}
-<td style={{...tdB,minWidth:CW.hw,width:CW.hw}}><DropCell value={o.hoursWarning||""} options={HW_OPTS.map(v=>({value:v,label:v||"—"}))} isActive={isA(o.id,"hw")} onActivate={()=>act(o.id,"hw")} onDone={v=>{updO(o.id,"hoursWarning",v);deact();}}><span style={{fontSize:12,fontWeight:600,color:hwM.color,whiteSpace:"nowrap"}}>{hwM.label}</span></DropCell></td>
-<td style={{...tdB,minWidth:CW.hwdate,width:CW.hwdate}}><DateCell value={o.date30Hours} isActive={isA(o.id,"hw30")} onActivate={()=>act(o.id,"hw30")} onDone={v=>{updO(o.id,"date30Hours",v);deact();}}/></td>
-<td style={{...tdB,minWidth:CW.expret,width:CW.expret}}><DateCell value={o.expectedReturn} isActive={isA(o.id,"expret")} onActivate={()=>act(o.id,"expret")} onDone={v=>{updO(o.id,"expectedReturn",v);deact();}}/></td>
+<td style={{...tdS(bg),...(isLockedByOther?.(o.id)?{boxShadow:"inset 3px 0 0 #f59e0b",background:bg}:{})}}>
+{isLockedByOther?.(o.id)&&<div style={{position:"absolute",top:1,right:2,
+  background:"#92400e",color:"#fef3c7",borderRadius:2,padding:"1px 4px",
+  fontSize:8,fontWeight:700,pointerEvents:"none",lineHeight:"1.4",zIndex:10,whiteSpace:"nowrap"}}>
+  ✎ {lockedBy?.(o.id)}
+</div>}
+<TxtCell value={o.fullName} isActive={isA(o.id,"full")} onActivate={()=>act(o.id,"full")} onChange={v=>updO(o.id,"fullName",v)} onDone={()=>deact(o.id)}/></td>
+<td style={{...tdB,minWidth:CW.steam,width:CW.steam}}><TxtCell value={o.steamName} mono isActive={isA(o.id,"steam")} onActivate={()=>act(o.id,"steam")} onChange={v=>updO(o.id,"steamName",v)} onDone={()=>deact(o.id)}/></td>
+<td style={{...tdB,minWidth:CW.call,width:CW.call,...(isDup?{boxShadow:"inset 0 0 0 2px #ef4444"}:{})}}><TxtCell value={o.callsign} mono align="center" isActive={isA(o.id,"call")} onActivate={()=>act(o.id,"call")} onChange={v=>updO(o.id,"callsign",v)} onDone={()=>deact(o.id)}/></td>
+<td style={{...tdB,minWidth:CW.rank,width:CW.rank}}><DropCell value={o.rank} options={GD_RANKS.map(r=>({value:r,label:r}))} isActive={isA(o.id,"rank")} onActivate={()=>act(o.id,"rank")} onDone={v=>{handleRankChange(o,v);deact(o.id);}}><RankBadge rank={o.rank}/></DropCell></td>
+<td style={{...tdB,minWidth:CW.lic,width:CW.lic}}><DropCell value={o.licenseClass} options={["Gold","Silver","Bronze",""].map(v=>({value:v,label:v||"—"}))} isActive={isA(o.id,"lic")} onActivate={()=>act(o.id,"lic")} onDone={v=>{updO(o.id,"licenseClass",v);deact(o.id);}}><span style={{background:licM.bg,color:licM.fg,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700}}>{o.licenseClass||"—"}</span></DropCell></td>
+{certs.map(cert=>{const cv=o.certValues?.[cert.id]||"";return<td key={cert.id} style={{...tdB,minWidth:CW.cert,width:CW.cert}} title={cert.fullName}><DropCell value={cv} options={certOpts(cert.id)} isActive={isA(o.id,`cv_${cert.id}`)} onActivate={()=>act(o.id,`cv_${cert.id}`)} onDone={v=>{updCV(o.id,cert.id,v);deact(o.id);}}><CvBadge val={cv}/></DropCell></td>;})}
+<td style={{...tdB,minWidth:CW.hw,width:CW.hw}}><DropCell value={o.hoursWarning||""} options={HW_OPTS.map(v=>({value:v,label:v||"—"}))} isActive={isA(o.id,"hw")} onActivate={()=>act(o.id,"hw")} onDone={v=>{updO(o.id,"hoursWarning",v);deact(o.id);}}><span style={{fontSize:12,fontWeight:600,color:hwM.color,whiteSpace:"nowrap"}}>{hwM.label}</span></DropCell></td>
+<td style={{...tdB,minWidth:CW.hwdate,width:CW.hwdate}}><DateCell value={o.date30Hours} isActive={isA(o.id,"hw30")} onActivate={()=>act(o.id,"hw30")} onDone={v=>{updO(o.id,"date30Hours",v);deact(o.id);}}/></td>
+<td style={{...tdB,minWidth:CW.expret,width:CW.expret}}><DateCell value={o.expectedReturn} isActive={isA(o.id,"expret")} onActivate={()=>act(o.id,"expret")} onDone={v=>{updO(o.id,"expectedReturn",v);deact(o.id);}}/></td>
 <td style={{...tdB,minWidth:CW.daysrem,width:CW.daysrem}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:26}}>{o.expectedReturn?<span style={{fontSize:12,fontWeight:700,color:dRemCol}}>{dRem!==null?(dRem<0?`${Math.abs(dRem)}d ago`:`${dRem}d`):"—"}</span>:<span style={{color:T.muted,fontSize:11}}>—</span>}</div></td>
-<td style={{...tdB,minWidth:CW.misc,width:CW.misc}}><DateCell value={o.lastRpMisconduct} isActive={isA(o.id,"misc")} onActivate={()=>act(o.id,"misc")} onDone={v=>{updO(o.id,"lastRpMisconduct",v);deact();}}/></td>
-<td style={{...tdB,minWidth:CW.promo,width:CW.promo}}><DateCell value={o.lastPromotionDate} isActive={isA(o.id,"promo")} onActivate={()=>act(o.id,"promo")} onDone={v=>{updO(o.id,"lastPromotionDate",v);deact();}}/></td>
-<td style={{...tdB,minWidth:CW.since,width:CW.since}}><DateCell value={o.lastPromotionDate} isActive={isA(o.id,"promo2")} onActivate={()=>act(o.id,"promo2")} onDone={v=>{updO(o.id,"lastPromotionDate",v);deact();}} display={o.lastPromotionDate?<span style={{fontSize:12,fontWeight:700,color:dayCol}}>{days}d</span>:<span style={{color:T.muted,fontSize:11}}>—</span>}/></td>
-<td style={{...tdB,minWidth:CW.restrict,width:CW.restrict}}><TxtCell value={o.rankRestriction} isActive={isA(o.id,"restr")} onActivate={()=>act(o.id,"restr")} onChange={v=>updO(o.id,"rankRestriction",v)} onDone={deact}/></td>
-<td style={{...tdB,minWidth:CW.ol,width:CW.ol}}><DropCell value={o.onLeave||""} options={BOOL_OPTS} isActive={isA(o.id,"ol")} onActivate={()=>act(o.id,"ol")} onDone={v=>{updO(o.id,"onLeave",v);deact();}}><span style={{fontSize:12,fontWeight:700,color:isOL?"#fbbf24":"#22c55e"}}>{isOL?"Yes":"No"}</span></DropCell></td>
+<td style={{...tdB,minWidth:CW.misc,width:CW.misc}}><DateCell value={o.lastRpMisconduct} isActive={isA(o.id,"misc")} onActivate={()=>act(o.id,"misc")} onDone={v=>{updO(o.id,"lastRpMisconduct",v);deact(o.id);}}/></td>
+<td style={{...tdB,minWidth:CW.promo,width:CW.promo}}><DateCell value={o.lastPromotionDate} isActive={isA(o.id,"promo")} onActivate={()=>act(o.id,"promo")} onDone={v=>{updO(o.id,"lastPromotionDate",v);deact(o.id);}}/></td>
+<td style={{...tdB,minWidth:CW.since,width:CW.since}}><DateCell value={o.lastPromotionDate} isActive={isA(o.id,"promo2")} onActivate={()=>act(o.id,"promo2")} onDone={v=>{updO(o.id,"lastPromotionDate",v);deact(o.id);}} display={o.lastPromotionDate?<span style={{fontSize:12,fontWeight:700,color:dayCol}}>{days}d</span>:<span style={{color:T.muted,fontSize:11}}>—</span>}/></td>
+<td style={{...tdB,minWidth:CW.restrict,width:CW.restrict}}><TxtCell value={o.rankRestriction} isActive={isA(o.id,"restr")} onActivate={()=>act(o.id,"restr")} onChange={v=>updO(o.id,"rankRestriction",v)} onDone={()=>deact(o.id)}/></td>
+<td style={{...tdB,minWidth:CW.ol,width:CW.ol}}><DropCell value={o.onLeave||""} options={BOOL_OPTS} isActive={isA(o.id,"ol")} onActivate={()=>act(o.id,"ol")} onDone={v=>{updO(o.id,"onLeave",v);deact(o.id);}}><span style={{fontSize:12,fontWeight:700,color:isOL?"#fbbf24":"#22c55e"}}>{isOL?"Yes":"No"}</span></DropCell></td>
 <td style={{...tdB,minWidth:CW.del,width:CW.del,textAlign:"center"}}>
   <button onClick={()=>setOpenMenu(o)} title="Actions"
     style={{background:"none",border:"none",cursor:"pointer",color:T.hint,fontSize:16,padding:"2px 8px",lineHeight:1,fontWeight:700}}>⋮</button>

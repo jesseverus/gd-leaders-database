@@ -16,7 +16,7 @@ import { AddCertModal }     from './components/modals/AddCertModal.jsx';
 import { Btn }              from './components/ui.jsx';
 import { melbToday, genId } from './lib/utils.js';
 import { useRealtimeChanges } from './hooks/useRealtimeChanges.js';
-import { useUndoStack }      from './hooks/useUndoStack.js';
+import { useRowLock }         from './hooks/useRowLock.js';
 import { useAuditLog }        from './hooks/useAuditLog.js';
 import { AuditLogTab }        from './components/AuditLogTab.jsx';
 
@@ -37,10 +37,9 @@ const TABS = [
 export default function App() {
   const [loggedIn,  setLoggedIn]  = useState(() => sessionStorage.getItem(SESSION_KEY) === '1');
   const [tab, setTab] = useState(() => {
-    const saved = sessionStorage.getItem('gdl_tab');
-    return saved !== null ? parseInt(saved, 10) : 0;
+    const s = sessionStorage.getItem('gdl_tab');
+    return s !== null ? parseInt(s, 10) : 0;
   });
-  // setTabAndSave defined above as setTabAndSave2
   const [search,    setSearch]    = useState('');
   const [showAddO,  setShowAddO]  = useState(false);
   const [showAddC,  setShowAddC]  = useState(false);
@@ -48,10 +47,9 @@ export default function App() {
   const [archiveReason, setArchiveReason] = useState('');
   const { changes, dismiss, dismissOne } = useRealtimeChanges();
   const { log: audit } = useAuditLog();
+  const importRef = useRef(null);
 
-  // ── Undo stack — per-tab history of reversible actions ──────────────
-  // Each entry: { label, undo: async fn }
-  // Stack resets when user changes tab.
+  // ── Undo stack — per-tab, resets on tab change ──────────────────────
   const [undoStack, setUndoStack] = useState([]);
   const pushUndo = useCallback((label, undoFn) => {
     setUndoStack(prev => [...prev.slice(-19), { label, undo: undoFn }]);
@@ -62,14 +60,19 @@ export default function App() {
     await top.undo();
     setUndoStack(prev => prev.slice(0, -1));
   }, [undoStack]);
-  // Reset undo stack on tab change
-  const setTabAndSave2 = useCallback((i) => {
+
+  // ── Row lock — shows who is editing which officer row ────────────────
+  const sessionDisplayName = 'User';
+  const { acquireLock, releaseLock, releaseAll, isLockedByOther, lockedBy } =
+    useRowLock(sessionDisplayName);
+
+  // Tab change — save to session, clear undo stack, release locks
+  const changeTab = useCallback((i) => {
     sessionStorage.setItem('gdl_tab', i);
     setTab(i);
     setUndoStack([]);
-  }, []);
-  const { pushUndo, undo, canUndo, lastLabel } = useUndoStack(tab);
-  const importRef = useRef(null);
+    releaseAll();
+  }, [releaseAll]);
 
   const [officers,      {upsert: upsertO, upsertMany: upsertManyO, remove: removeO},           oR] = useDb('officers');
   const [certs,         {upsert: upsertC, upsertMany: upsertManyC, remove: removeC},           cR] = useDb('certs');
@@ -135,14 +138,12 @@ export default function App() {
   // Wrapped officer upsert — syncs FTO cert grants/removals and rank changes into FTO DB
   const handleUpsertOfficer = useCallback((updated) => {
     const isNew = !officers.find(o => o.id === updated.id);
-    const prevO = officers.find(o => o.id === updated.id);
-    if (!isNew && prevO) {
-      const snap = {...prevO};
-      pushUndo({ label: `Edit — ${prevO.fullName||prevO.steamName}`,
-        undo: () => upsertO(snap) });
-    }
+    const prevSnap = officers.find(o => o.id === updated.id);
     upsertO(updated);
-    const prev = officers.find(o => o.id === updated.id);
+    const prev = prevSnap;
+    if (prevSnap && !isNew) {
+      pushUndo(`Revert ${updated.fullName||updated.steamName}`, () => upsertO(prevSnap));
+    }
     if (isNew) {
       audit({ action:'OFFICER_ADD', subject: updated.fullName||updated.steamName,
         detail:`Added to GD roster · Rank: ${updated.rank}`, tab:'GD' });
@@ -229,13 +230,8 @@ export default function App() {
   // Wrapped officer remove — archives FTO record instead of deleting
   const handleRemoveOfficer = useCallback((id) => {
     const o = officers.find(x => x.id === id);
-    if (o) {
-      audit({ action:'OFFICER_REMOVE', subject: o.fullName||o.steamName,
-        detail:`Removed from GD roster`, tab:'GD' });
-      const snap = {...o};
-      pushUndo({ label: `Remove — ${o.fullName||o.steamName}`,
-        undo: () => upsertO(snap) });
-    }
+    if (o) audit({ action:'OFFICER_REMOVE', subject: o.fullName||o.steamName,
+      detail:`Removed from GD roster`, tab:'GD' });
     removeO(id);
     if (o) {
       const existingFTO = ftoOfficers.find(f => f.isPrevious !== 'Y' && f.gdOfficerId === id)
@@ -252,11 +248,9 @@ export default function App() {
       subject: o.fullName||o.steamName,
       detail: reason, tab:'GD', prevValue: o.rank });
     const snapO = {...o};
-    pushUndo({ label: `${type} — ${o.fullName||o.steamName}`,
-      undo: () => upsertO(snapO) });
     // Add termination record
     upsertTm({
-      id: genId(), steamName: o.steamName, fullName: o.fullName,
+      id: transferId, steamName: o.steamName, fullName: o.fullName,
       callsign: o.callsign, rank: o.rank,
       type, reason, termDate: now, year,
     });
@@ -268,11 +262,7 @@ export default function App() {
         upsertCS({...s, officer:''});
       }
     });
-    // Push undo — restores officer to GD (user will need to manually remove termination record)
-    pushUndo(
-      `Restore ${snapO.fullName||snapO.steamName} (${type})`,
-      () => { upsertO(snapO); }
-    );
+    pushUndo(`Restore ${snapO.fullName||snapO.steamName} (${type})`, () => upsertO(snapO));
   }, [upsertTm, handleRemoveOfficer, portCS, upsertCS, pushUndo]);
 
   // Transfer an officer from GD tab (adds transfer record, optionally removes from GD)
@@ -283,35 +273,26 @@ export default function App() {
     audit({ action:'TRANSFER', subject: o.fullName||o.steamName,
       detail: reason.trim(), tab:'GD', newValue: div||'GD' });
     const transferId = genId();
+    const snapForTransfer = {...o};
     upsertT({
       id: transferId, steamName: o.steamName, fullName: o.fullName,
       callsign: o.callsign, rank: o.rank, promoDate: o.lastPromotionDate,
       division: div, notes: reason.trim(),
       year: new Date().getFullYear().toString(),
     });
-    const snapForTransfer = {...o};
     if (window.confirm(`Also remove "${o.fullName || o.steamName}" from GD Database?`)) {
       removeO(o.id);
-      pushUndo(
-        `Undo transfer — restore ${o.fullName||o.steamName}`,
-        () => { removeT(transferId); upsertO(snapForTransfer); }
-      );
+      pushUndo(`Undo transfer — restore ${o.fullName||o.steamName}`,
+        () => { removeT(transferId); upsertO(snapForTransfer); });
     } else {
-      pushUndo(
-        `Remove transfer record — ${o.fullName||o.steamName}`,
-        () => removeT(transferId)
-      );
+      pushUndo(`Remove transfer record — ${o.fullName||o.steamName}`,
+        () => removeT(transferId));
     }
   }, [upsertT, removeT, removeO, pushUndo]);
 
   // Wrapped PORT CS upsert — if officer name changes, sync back to GD and PORT Trials
   const handleUpsertCS = useCallback((s) => {
     const prev = portCS.find(x => x.id === s.id);
-    if (prev) {
-      const snap = {...prev};
-      pushUndo({ label: `PORT CS — POR ${prev.number}`,
-        undo: () => upsertCS(snap) });
-    }
     upsertCS(s);
     const prevOfficer = (prev?.officer || '').trim();
     const newOfficer  = (s.officer   || '').trim();
@@ -334,11 +315,6 @@ export default function App() {
   // Wrapped PORT Trials upsert — if name changes, sync back to GD and PORT CS
   const handleUpsertPT = useCallback((t) => {
     const prev = portTrials.find(x => x.id === t.id);
-    if (prev) {
-      const snap = {...prev};
-      pushUndo({ label: `PORT Trial — ${prev.name||'record'}`,
-        undo: () => upsertPT(snap) });
-    }
     upsertPT(t);
     const prevName = (prev?.name || '').trim();
     const newName  = (t.name   || '').trim();
@@ -428,12 +404,13 @@ export default function App() {
 
       {/* ── UNDO BANNER ── */}
       {undoStack.length > 0 && (
-        <div style={{position:'fixed',bottom:undoStack.length>0?84:20,left:'50%',transform:'translateX(-50%)',
+        <div style={{position:'fixed',bottom:20,left:'50%',transform:'translateX(-50%)',
           zIndex:8999,display:'flex',alignItems:'center',gap:10,
           background:'#0f1a2e',border:'1px solid #2d4a7a',borderRadius:8,
           boxShadow:'0 4px 20px rgba(0,0,0,0.7)',padding:'8px 14px',
-          maxWidth:'90vw',whiteSpace:'nowrap'}}>
-          <span style={{color:'#93c5fd',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',flex:1}}>
+          maxWidth:'min(500px,90vw)',whiteSpace:'nowrap'}}>
+          <span style={{color:'#93c5fd',fontSize:12,overflow:'hidden',
+            textOverflow:'ellipsis',flex:1}}>
             {undoStack[undoStack.length-1].label}
           </span>
           <button onClick={popUndo}
@@ -537,21 +514,10 @@ export default function App() {
             <span style={{color:T.borderMid}}>|</span>
             <span>FTO: <strong style={{color:'#a78bfa'}}>{ftoOfficers.length}</strong></span>
           </div>
-          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-            {canUndo && (
-              <button onClick={undo} title={`Undo: ${lastLabel}`}
-                style={{background:'#1e3050',border:'1px solid #2d4a7a',borderRadius:4,
-                  color:'#93c5fd',fontSize:11,padding:'3px 10px',cursor:'pointer',
-                  display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap',maxWidth:200}}>
-                <span style={{fontSize:13}}>↩</span>
-                <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>Undo: {lastLabel}</span>
-              </button>
-            )}
-            <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
-              style={{background:'none',border:'none',cursor:'pointer',color:T.muted,fontSize:11}}>
-              Logout
-            </button>
-          </div>
+          <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
+            style={{background:'none',border:'none',cursor:'pointer',color:T.muted,fontSize:11,marginLeft:'auto',flexShrink:0}}>
+            Logout
+          </button>
         </div>
 
         {/* Row 2: tabs · action buttons */}
@@ -560,7 +526,7 @@ export default function App() {
             const cnt = tabCounts[i] || 0;
             const isActive = tab === i;
             return (
-              <button key={i} onClick={() => setTabAndSave2(i)}
+              <button key={i} onClick={() => changeTab(i)}
                 style={{background:'none',border:'none',borderBottom:`2px solid ${isActive ? T.accent : 'transparent'}`,
                   cursor:'pointer',padding:'0 12px',height:40,fontSize:11,fontWeight:600,
                   color:isActive ? T.accent : T.hint,display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
@@ -586,18 +552,15 @@ export default function App() {
         {tab === 0 && <GDTable officers={officers} certs={sortedCerts}
           onUpsertOfficer={handleUpsertOfficer} onRemoveOfficer={handleRemoveOfficer}
           onUpsertCert={upsertC} onRemoveCert={removeC}
-          search={search} onTransfer={handleTransfer} onTerminate={handleTerminate}/>}
+          search={search} onTransfer={handleTransfer} onTerminate={handleTerminate}
+          onCellFocus={acquireLock} onCellBlur={releaseLock}
+          isLockedByOther={isLockedByOther} lockedBy={lockedBy}/>}
         {tab === 1 && <TransfersTab transfers={transfers} onUpsert={upsertT} onRemove={removeT} search={search}/>}
         {tab === 2 && <TerminationsTab terminations={terminations} onUpsert={upsertTm} onRemove={removeTm} search={search}/>}
         {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={handleUpsertPT} onRemove={removePT} search={search}/>}
         {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={handleUpsertCS} onRemove={removeCS} search={search}/>}
         {tab === 6 && <AuditLogTab search={search}/>}
-        {tab === 5 && <FTOTab ftoOfficers={ftoOfficers}
-          onUpsert={f=>{
-            const prev=ftoOfficers.find(x=>x.id===f.id);
-            if(prev){const snap={...prev};pushUndo({label:`FTO — ${prev.fullName}`,undo:()=>upsertFTO(snap)});}
-            upsertFTO(f);
-          }}
+        {tab === 5 && <FTOTab ftoOfficers={ftoOfficers} onUpsert={upsertFTO}
           onRemove={id=>{const f=ftoOfficers.find(x=>x.id===id);if(f&&f.isPrevious!=='Y')archiveFTO(f);else removeFTO(id);}}
           onCheckAndAdd={checkAndAddFTO}
           search={search}/>}
