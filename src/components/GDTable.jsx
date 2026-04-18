@@ -63,130 +63,238 @@ const totalCols=5+certs.length+10;
 
 const PromotionModal=()=>{
   if(!promoModal)return null;
-  const{officers:dueList,ignored,decided,step}=promoModal;
-  const remaining=dueList.filter(o=>!ignored.has(o.id)&&!decided.find(d=>d.officer.id===o.id));
-  const current=remaining[0];
-  const T2=T; // alias
+  const{step}=promoModal;
 
-  if(step==='confirm'){
+  // ── Step: review (single checklist screen) ───────────────────────────────
+  if(step==='review'){
+    const{decisions,setDecisions}=promoModal;
+    const regular=dueRegular;
+    const recruits=dueRecruits;
+    const all=[...regular,...recruits];
+    const promoted=all.filter(o=>decisions[o.id]==='promote');
+    const d2=daysSince;
+
     return(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
-        <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,width:"100%",maxWidth:480,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-          <div style={{padding:"12px 16px",borderBottom:"1px solid #17243a",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14}}>Confirm Promotions</div>
-            <button onClick={()=>setPromoModal(null)} style={{background:"none",border:"none",color:"#3d526e",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
-          </div>
-          <div style={{padding:16}}>
-            {decided.length===0
-              ? <div style={{color:"#5a7a9a",fontSize:13,textAlign:"center",padding:"12px 0"}}>No promotions selected.</div>
-              : <>
-                <div style={{fontSize:11,color:"#5a7a9a",marginBottom:12}}>{decided.length} officer{decided.length!==1?"s":""} to be promoted:</div>
-                {decided.map(({officer:o,newRank})=>(
-                  <div key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",background:"#060d1a",borderRadius:5,marginBottom:5}}>
-                    <span style={{color:"#d8e4f0",fontWeight:700,fontSize:12,flex:1}}>{o.fullName||o.steamName}</span>
-                    <span style={{color:"#9ca3af",fontSize:11}}>{o.rank}</span>
-                    <span style={{color:"#5a7a9a",fontSize:11}}>→</span>
-                    <span style={{color:"#22c55e",fontSize:11,fontWeight:700}}>{newRank}</span>
-                  </div>
-                ))}
-              </>
-            }
-            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
-              <button onClick={()=>setPromoModal(p=>({...p,step:"review"}))} style={{background:"none",border:"1px solid #17243a",borderRadius:5,color:"#5a7a9a",fontSize:11,padding:"5px 12px",cursor:"pointer"}}>Back</button>
-              {decided.length>0&&<button onClick={()=>{
-                const today=new Date().toLocaleDateString("en-CA",{timeZone:"Australia/Melbourne"});
-                decided.forEach(({officer:o,newRank})=>{
-                  onUpsertOfficer({...o,rank:newRank,lastPromotionDate:today});
-                });
-                setPromoModal(p=>({...p,step:"done"}));
-              }} style={{background:"#14532d",border:"none",borderRadius:5,color:"#bbf7d0",fontSize:11,padding:"5px 14px",cursor:"pointer",fontWeight:700}}>
-                Confirm {decided.length} Promotion{decided.length!==1?"s":""}
-              </button>}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,
+        display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+        onClick={()=>setPromoModal(null)}>
+        <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,
+          width:"100%",maxWidth:560,maxHeight:"80vh",overflow:"hidden",display:"flex",flexDirection:"column"}}
+          onClick={e=>e.stopPropagation()}>
 
-  if(step==="done"){
-    return(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
-        <div style={{background:"#0f1a2e",border:"1px solid #14532d",borderRadius:10,width:"100%",maxWidth:400,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-          <div style={{padding:"24px 20px",textAlign:"center"}}>
-            <div style={{fontSize:32,marginBottom:8}}>✅</div>
-            <div style={{color:"#bbf7d0",fontWeight:700,fontSize:15,marginBottom:6}}>{decided.length} Promotion{decided.length!==1?"s":""} Complete</div>
-            <div style={{color:"#5a7a9a",fontSize:12,marginBottom:16}}>Last Promotion Date has been updated for all promoted officers.</div>
-            <button onClick={()=>setPromoModal(null)} style={{background:"#1e3a8a",border:"none",borderRadius:5,color:"#bfdbfe",fontSize:12,padding:"7px 20px",cursor:"pointer",fontWeight:700}}>Done</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // step === "review" — show one officer at a time
-  if(!current){
-    // All processed — go to confirm
-    return(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
-        <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,width:"100%",maxWidth:400,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-          <div style={{padding:"16px 20px",textAlign:"center"}}>
-            <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14,marginBottom:8}}>All officers reviewed</div>
-            <div style={{color:"#5a7a9a",fontSize:12,marginBottom:14}}>{decided.length} promotion{decided.length!==1?"s":""} selected · {ignored.size} ignored</div>
-            <div style={{display:"flex",justifyContent:"center",gap:8}}>
-              <button onClick={()=>setPromoModal(null)} style={{background:"none",border:"1px solid #17243a",borderRadius:5,color:"#5a7a9a",fontSize:11,padding:"5px 12px",cursor:"pointer"}}>Cancel</button>
-              <button onClick={()=>setPromoModal(p=>({...p,step:"confirm"}))} style={{background:"#1e3a8a",border:"none",borderRadius:5,color:"#bfdbfe",fontSize:11,padding:"5px 14px",cursor:"pointer",fontWeight:700}}>Review & Confirm →</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const newRank=NEXT_RANK[current.rank]||current.rank;
-  const d=daysSince(current.lastPromotionDate);
-  const daysText=d!==null?`${d} days since last promotion`:"No promotion date recorded";
-  const progressPct=Math.min(100,Math.round(((dueList.indexOf(current)+1)/dueList.length)*100));
-
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setPromoModal(null)}>
-      <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,width:"100%",maxWidth:440,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-        {/* Progress */}
-        <div style={{height:3,background:"#17243a"}}>
-          <div style={{height:"100%",background:"#3b82f6",width:`${progressPct}%`,transition:"width 0.3s"}}/>
-        </div>
-        <div style={{padding:"12px 16px",borderBottom:"1px solid #17243a",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14}}>Due for Promotion</div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{color:"#5a7a9a",fontSize:11}}>{dueList.indexOf(current)+1} of {dueList.length}</span>
-            <button onClick={()=>setPromoModal(null)} style={{background:"none",border:"none",color:"#3d526e",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
-          </div>
-        </div>
-        <div style={{padding:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-            <div style={{width:44,height:44,background:"#1e3050",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <span style={{color:"#93c5fd",fontSize:13,fontWeight:800}}>{(current.fullName||"?").slice(0,2).toUpperCase()}</span>
-            </div>
+          {/* Header */}
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #17243a",
+            display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
             <div>
-              <div style={{color:"#d8e4f0",fontWeight:700,fontSize:15}}>{current.fullName||current.steamName}</div>
-              <div style={{color:"#5a7a9a",fontSize:11}}>{daysText}</div>
+              <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14}}>Due for Promotion</div>
+              <div style={{color:"#5a7a9a",fontSize:11}}>{all.length} officer{all.length!==1?"s":""} to review</div>
+            </div>
+            <button onClick={()=>setPromoModal(null)}
+              style={{background:"none",border:"none",color:"#3d526e",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+          </div>
+
+          {/* Scrollable list */}
+          <div style={{overflowY:"auto",flex:1}}>
+
+            {/* Regular promotions */}
+            {regular.length>0&&<>
+              <div style={{padding:"8px 16px 4px",fontSize:9,fontWeight:700,color:"#5a7a9a",
+                textTransform:"uppercase",letterSpacing:"0.08em",background:"#060d1a"}}>
+                Promotions Due
+              </div>
+              {regular.map(o=>{
+                const days=d2(o.lastPromotionDate);
+                const dec=decisions[o.id]||'';
+                const newRank=NEXT_RANK[o.rank]||o.rank;
+                return(
+                  <div key={o.id} style={{display:"flex",alignItems:"center",gap:12,
+                    padding:"10px 16px",borderBottom:"1px solid #0d1729",
+                    background:dec==='promote'?"#0a1f0a":dec==='ignore'?"#111":"transparent"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:"#d8e4f0",fontWeight:700,fontSize:13,
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {o.fullName||o.steamName}
+                      </div>
+                      <div style={{color:"#5a7a9a",fontSize:11,marginTop:2,display:"flex",gap:8}}>
+                        <span>{o.rank}</span>
+                        <span style={{color:"#3b82f6"}}>→</span>
+                        <span style={{color:"#22c55e",fontWeight:600}}>{newRank}</span>
+                        <span style={{color:"#ef4444"}}>·</span>
+                        <span style={{color:days>=31?"#ef4444":"#fbbf24"}}>{days}d</span>
+                      </div>
+                    </div>
+                    <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",
+                      color:"#22c55e",fontSize:11,fontWeight:700,padding:"4px 10px",
+                      background:dec==='promote'?"#14532d":"transparent",
+                      border:"1px solid "+(dec==='promote'?"#14532d":"#374151"),
+                      borderRadius:4}}>
+                      <input type="checkbox" checked={dec==='promote'}
+                        onChange={()=>setPromoModal(p=>({...p,decisions:{...p.decisions,[o.id]:dec==='promote'?'':'promote'}}))}
+                        style={{accentColor:"#22c55e",width:13,height:13}}/>
+                      Promote
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",
+                      color:"#9ca3af",fontSize:11,padding:"4px 10px",
+                      background:dec==='ignore'?"#1f2937":"transparent",
+                      border:"1px solid "+(dec==='ignore'?"#374151":"#374151"),
+                      borderRadius:4}}>
+                      <input type="checkbox" checked={dec==='ignore'}
+                        onChange={()=>setPromoModal(p=>({...p,decisions:{...p.decisions,[o.id]:dec==='ignore'?'':'ignore'}}))}
+                        style={{accentColor:"#6b7280",width:13,height:13}}/>
+                      Ignore
+                    </label>
+                  </div>
+                );
+              })}
+            </>}
+
+            {/* Recruit warnings — separate section */}
+            {recruits.length>0&&<>
+              <div style={{padding:"8px 16px 4px",fontSize:9,fontWeight:700,
+                color:"#fbbf24",textTransform:"uppercase",letterSpacing:"0.08em",
+                background:"#1c1200",display:"flex",alignItems:"center",gap:6}}>
+                <span>⚠</span> Recruits Overdue (30d+) — Recruit Phase Should Be Complete
+              </div>
+              {recruits.map(o=>{
+                const days=d2(o.lastPromotionDate);
+                const dec=decisions[o.id]||'';
+                const newRank=NEXT_RANK[o.rank]||o.rank;
+                return(
+                  <div key={o.id} style={{display:"flex",alignItems:"center",gap:12,
+                    padding:"10px 16px",borderBottom:"1px solid #0d1729",
+                    background:dec==='promote'?"#0a1f0a":dec==='ignore'?"#111":"#0d0900"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:"#d8e4f0",fontWeight:700,fontSize:13,
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {o.fullName||o.steamName}
+                      </div>
+                      <div style={{color:"#5a7a9a",fontSize:11,marginTop:2,display:"flex",gap:8}}>
+                        <span>{o.rank}</span>
+                        <span style={{color:"#3b82f6"}}>→</span>
+                        <span style={{color:"#22c55e",fontWeight:600}}>{newRank}</span>
+                        <span style={{color:"#fbbf24"}}>·</span>
+                        <span style={{color:"#fbbf24",fontWeight:600}}>{days}d — overdue</span>
+                      </div>
+                    </div>
+                    <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",
+                      color:"#22c55e",fontSize:11,fontWeight:700,padding:"4px 10px",
+                      background:dec==='promote'?"#14532d":"transparent",
+                      border:"1px solid "+(dec==='promote'?"#14532d":"#374151"),
+                      borderRadius:4}}>
+                      <input type="checkbox" checked={dec==='promote'}
+                        onChange={()=>setPromoModal(p=>({...p,decisions:{...p.decisions,[o.id]:dec==='promote'?'':'promote'}}))}
+                        style={{accentColor:"#22c55e",width:13,height:13}}/>
+                      Promote
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",
+                      color:"#9ca3af",fontSize:11,padding:"4px 10px",
+                      background:dec==='ignore'?"#1f2937":"transparent",
+                      border:"1px solid "+(dec==='ignore'?"#374151":"#374151"),
+                      borderRadius:4}}>
+                      <input type="checkbox" checked={dec==='ignore'}
+                        onChange={()=>setPromoModal(p=>({...p,decisions:{...p.decisions,[o.id]:dec==='ignore'?'':'ignore'}}))}
+                        style={{accentColor:"#6b7280",width:13,height:13}}/>
+                      Ignore
+                    </label>
+                  </div>
+                );
+              })}
+            </>}
+          </div>
+
+          {/* Footer */}
+          <div style={{padding:"10px 16px",borderTop:"1px solid #17243a",flexShrink:0,
+            display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+            <span style={{color:"#5a7a9a",fontSize:11}}>
+              {promoted.length} selected for promotion
+            </span>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setPromoModal(null)}
+                style={{background:"none",border:"1px solid #17243a",borderRadius:5,
+                  color:"#5a7a9a",fontSize:11,padding:"5px 12px",cursor:"pointer"}}>Cancel</button>
+              <button disabled={promoted.length===0}
+                onClick={()=>setPromoModal(p=>({...p,step:"confirm"}))}
+                style={{background:promoted.length>0?"#1e3a8a":"#1a1a2e",border:"none",borderRadius:5,
+                  color:promoted.length>0?"#bfdbfe":"#3d526e",fontSize:11,padding:"5px 14px",
+                  cursor:promoted.length>0?"pointer":"default",fontWeight:700}}>
+                Review {promoted.length} Promotion{promoted.length!==1?"s":""} →
+              </button>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#060d1a",borderRadius:7,marginBottom:16}}>
-            <span style={{fontSize:12,color:"#9ca3af"}}>{current.rank}</span>
-            <span style={{color:"#3b82f6",fontSize:16}}>→</span>
-            <span style={{fontSize:13,color:"#22c55e",fontWeight:700}}>{newRank}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step: confirm ─────────────────────────────────────────────────────────
+  if(step==='confirm'){
+    const all=[...dueRegular,...dueRecruits];
+    const promoted=all.filter(o=>promoModal.decisions[o.id]==='promote');
+    return(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,
+        display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+        onClick={()=>setPromoModal(null)}>
+        <div style={{background:"#0f1a2e",border:"1px solid #1e3050",borderRadius:10,
+          width:"100%",maxWidth:440,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #17243a",
+            display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{color:"#d8e4f0",fontWeight:700,fontSize:14}}>Confirm Promotions</div>
+            <button onClick={()=>setPromoModal(p=>({...p,step:"review"}))}
+              style={{background:"none",border:"none",color:"#5a7a9a",fontSize:11,cursor:"pointer"}}>← Back</button>
           </div>
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <button onClick={()=>setPromoModal(p=>({...p,ignored:new Set([...p.ignored,current.id])}))}
-              style={{background:"none",border:"1px solid #374151",borderRadius:5,color:"#9ca3af",fontSize:12,padding:"7px 16px",cursor:"pointer"}}>
-              Ignore
-            </button>
-            <button onClick={()=>setPromoModal(p=>({...p,decided:[...p.decided,{officer:current,newRank}]}))}
-              style={{background:"#14532d",border:"none",borderRadius:5,color:"#bbf7d0",fontSize:12,padding:"7px 16px",cursor:"pointer",fontWeight:700}}>
-              Promote →
+          <div style={{padding:16,maxHeight:"60vh",overflowY:"auto"}}>
+            <div style={{fontSize:11,color:"#5a7a9a",marginBottom:12}}>
+              Promote {promoted.length} officer{promoted.length!==1?"s":""}? Last Promotion Date will be set to today.
+            </div>
+            {promoted.map(o=>(
+              <div key={o.id} style={{display:"flex",alignItems:"center",gap:10,
+                padding:"7px 10px",background:"#060d1a",borderRadius:5,marginBottom:5}}>
+                <span style={{color:"#d8e4f0",fontWeight:700,fontSize:12,flex:1}}>
+                  {o.fullName||o.steamName}
+                </span>
+                <span style={{color:"#9ca3af",fontSize:11}}>{o.rank}</span>
+                <span style={{color:"#5a7a9a",fontSize:11}}>→</span>
+                <span style={{color:"#22c55e",fontSize:11,fontWeight:700}}>{NEXT_RANK[o.rank]}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{padding:"10px 16px",borderTop:"1px solid #17243a",
+            display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={()=>setPromoModal(p=>({...p,step:"review"}))}
+              style={{background:"none",border:"1px solid #17243a",borderRadius:5,
+                color:"#5a7a9a",fontSize:11,padding:"5px 12px",cursor:"pointer"}}>Back</button>
+            <button onClick={()=>{
+              const today=new Date().toLocaleDateString("en-CA",{timeZone:"Australia/Melbourne"});
+              promoted.forEach(o=>onUpsertOfficer({...o,rank:NEXT_RANK[o.rank],lastPromotionDate:today}));
+              setPromoModal(p=>({...p,step:"done",promotedCount:promoted.length}));
+            }} style={{background:"#14532d",border:"none",borderRadius:5,color:"#bbf7d0",
+              fontSize:11,padding:"5px 14px",cursor:"pointer",fontWeight:700}}>
+              Confirm {promoted.length} Promotion{promoted.length!==1?"s":""}
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step: done ────────────────────────────────────────────────────────────
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10001,
+      display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+      onClick={()=>setPromoModal(null)}>
+      <div style={{background:"#0f1a2e",border:"1px solid #14532d",borderRadius:10,
+        width:"100%",maxWidth:380,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"28px 20px",textAlign:"center"}}>
+          <div style={{fontSize:36,marginBottom:8}}>✅</div>
+          <div style={{color:"#bbf7d0",fontWeight:700,fontSize:15,marginBottom:6}}>
+            {promoModal.promotedCount} Promotion{promoModal.promotedCount!==1?"s":""} Complete
+          </div>
+          <div style={{color:"#5a7a9a",fontSize:12,marginBottom:18}}>
+            Last Promotion Date updated for all promoted officers.
+          </div>
+          <button onClick={()=>setPromoModal(null)}
+            style={{background:"#1e3a8a",border:"none",borderRadius:5,color:"#bfdbfe",
+              fontSize:12,padding:"7px 20px",cursor:"pointer",fontWeight:700}}>Done</button>
         </div>
       </div>
     </div>
@@ -268,23 +376,27 @@ const PROMO_THRESHOLD_DAYS=3; // show if within 3 days of, or past, promo date
 // Since we don't have rank thresholds exported, we'll use promoColor returning non-grey as the signal.
 // Actually the safest approach: expose the raw days and let promoColor signal urgency.
 // We'll flag an officer as "due" if promoColor returns a warning/danger colour (not the default muted).
-// Ranks eligible for promotion tracking (Recruit → First Constable only)
-const PROMO_ELIGIBLE=new Set(['Recruit','Probationary Constable','Constable','First Constable']);
 const NEXT_RANK={
   'Recruit':'Probationary Constable',
   'Probationary Constable':'Constable',
   'Constable':'First Constable',
   'First Constable':'Senior Constable',
 };
+// Returns true if officer should appear in the promotion modal
+// Recruits only appear at 30d+ (overdue), others appear at warning threshold
 const isDueForPromo=(o)=>{
-  if(!PROMO_ELIGIBLE.has(o.rank))return false;
   const d=daysSince(o.lastPromotionDate);
   if(d===null||d===undefined)return false;
-  // Use promoColor — returns non-muted when due/overdue
-  const col=promoColor(o.rank,d);
-  return col==='#fbbf24'||col==='#ef4444'; // warning or danger only
+  if(o.rank==='Recruit')                return d>=30;
+  if(o.rank==='Probationary Constable') return d>=14;
+  if(o.rank==='Constable')              return d>=25;
+  if(o.rank==='First Constable')        return d>=31;
+  return false;
 };
+// Split into regular promos and recruit warnings
 const dueOfficers=sorted.filter(isDueForPromo);
+const dueRecruits=dueOfficers.filter(o=>o.rank==='Recruit');
+const dueRegular=dueOfficers.filter(o=>o.rank!=='Recruit');
 
 // Promotion modal state
 const[promoModal,setPromoModal]=useState(null);
@@ -368,7 +480,7 @@ return<div style={{position:'relative'}}>
 <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 10px 6px"}}>
   <button onClick={()=>{
     if(dueOfficers.length===0)return;
-    setPromoModal({officers:dueOfficers,ignored:new Set(),decided:[],step:"review"});
+    setPromoModal({decisions:{},step:"review"});
   }} style={{display:"flex",alignItems:"center",gap:6,background:promoModal?"#5b21b6":"#0f1a2e",border:`1px solid ${promoModal?"#7c3aed":T.borderMid}`,borderRadius:5,color:promoModal?"#e9d5ff":"#a78bfa",fontSize:11,fontWeight:700,padding:"5px 12px",cursor:"pointer",transition:"all 0.15s",opacity:dueOfficers.length===0?0.4:1}}>
     <span style={{fontSize:13}}>🎖</span>
     Due for Promotion
