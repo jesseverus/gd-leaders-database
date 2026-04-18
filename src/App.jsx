@@ -17,12 +17,14 @@ import { Btn }              from './components/ui.jsx';
 import { melbToday, genId } from './lib/utils.js';
 import { useRealtimeChanges } from './hooks/useRealtimeChanges.js';
 import { useRowLock }         from './hooks/useRowLock.js';
+import { useAuth }            from './hooks/useAuth.js';
+import { useBackup }          from './hooks/useBackup.js';
+import { UserManagementTab }  from './components/UserManagementTab.jsx';
+import { BackupsPanel }       from './components/BackupsPanel.jsx';
 import { useAuditLog }        from './hooks/useAuditLog.js';
 import { AuditLogTab }        from './components/AuditLogTab.jsx';
 
-const AUTH_PW  = import.meta.env.VITE_APP_PASSWORD ?? 'burnbook';
 const APP_NAME = 'GD Leaders Database';
-const SESSION_KEY = 'gdl_authed';
 
 const TABS = [
   { short: 'GD'          },
@@ -32,10 +34,14 @@ const TABS = [
   { short: 'PORT CS'     },
   { short: 'FTO DB'      },
   { short: 'Audit Log'   },
+  { short: 'Backups'     },
+  { short: 'Users'       },
 ];
 
 export default function App() {
-  const [loggedIn,  setLoggedIn]  = useState(() => sessionStorage.getItem(SESSION_KEY) === '1');
+  const auth = useAuth();
+  const { session, login, logout, isAdmin } = auth;
+  const loggedIn = !!session;
   const [tab, setTab] = useState(() => {
     const s = sessionStorage.getItem('gdl_tab');
     return s !== null ? parseInt(s, 10) : 0;
@@ -62,7 +68,7 @@ export default function App() {
   }, [undoStack]);
 
   // ── Row lock — shows who is editing which officer row ────────────────
-  const sessionDisplayName = 'User';
+  const sessionDisplayName = session?.displayName ?? 'User';
   const { acquireLock, releaseLock, releaseAll, isLockedByOther, lockedBy } =
     useRowLock(sessionDisplayName);
 
@@ -83,6 +89,10 @@ export default function App() {
   const [ftoOfficers,   {upsert: upsertFTO, remove: removeFTO},                                foR]= useDb('ftoOfficers');
 
   const ready = oR && cR && tR && tmR && ptR && pcR && foR;
+
+  // Backup — auto-daily + manual
+  const backupData = ready ? { officers, certs, transfers, terminations, portTrials, portCS, ftoOfficers } : null;
+  const backup = useBackup(backupData);
 
   // Sort certs by order
   const sortedCerts = useMemo(() => [...certs].sort((a, b) => (a.order || 0) - (b.order || 0)), [certs]);
@@ -381,6 +391,8 @@ export default function App() {
       4: portCS.filter(s => (s.officer||'').toLowerCase().includes(sq)).length,
       5: ftoOfficers.filter(o=> [o.fullName,o.rank,o.division].some(v=>(v||'').toLowerCase().includes(sq))).length,
       6: 0,
+      7: 0,
+      8: 0,
     };
   }, [sq, officers, transfers, terminations, portTrials, portCS, ftoOfficers]);
 
@@ -392,7 +404,16 @@ export default function App() {
     accent:'#3b82f6',text:'#d8e4f0',muted:'#3d526e',hint:'#5a7a9a',
   };
 
-  if (!loggedIn) return <LoginScreen onLogin={() => { sessionStorage.setItem(SESSION_KEY,'1'); setLoggedIn(true); }} authPw={AUTH_PW} appName={APP_NAME}/>;
+  if (!loggedIn) return <LoginScreen onLogin={async (username, pin) => {
+    const result = await auth.login(username, pin);
+    if (result.ok) {
+      // Log login event
+      setTimeout(() => audit({ action:'USER_LOGIN',
+        subject: result.session.displayName,
+        detail: 'Logged in', tab:'System' }), 500);
+    }
+    return result;
+  }} appName={APP_NAME}/>;
   if (!ready)    return (
     <div style={{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',color:T.hint,fontSize:14}}>
       Connecting to database…
@@ -514,15 +535,22 @@ export default function App() {
             <span style={{color:T.borderMid}}>|</span>
             <span>FTO: <strong style={{color:'#a78bfa'}}>{ftoOfficers.length}</strong></span>
           </div>
-          <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
-            style={{background:'none',border:'none',cursor:'pointer',color:T.muted,fontSize:11,marginLeft:'auto',flexShrink:0}}>
-            Logout
-          </button>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto",flexShrink:0}}>
+            <span style={{fontSize:10,color:T.muted}}>{session?.displayName}</span>
+            {session?.role==="admin"&&<span style={{background:"#1e3a8a",color:"#bfdbfe",
+              borderRadius:3,padding:"1px 5px",fontSize:8,fontWeight:700}}>ADMIN</span>}
+            <button onClick={()=>{ audit({action:"USER_LOGOUT",subject:session?.displayName,detail:"Logged out",tab:"System"}); logout(); }}
+              style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:11}}>
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Row 2: tabs · action buttons */}
         <div style={{display:'flex',alignItems:'center',padding:'0 14px',overflowX:'auto',minHeight:40}}>
           {TABS.map((tb, i) => {
+            // Hide Users tab for non-admins
+            if (i === 8 && !isAdmin) return null;
             const cnt = tabCounts[i] || 0;
             const isActive = tab === i;
             return (
@@ -560,6 +588,13 @@ export default function App() {
         {tab === 3 && <PortTrialTab portTrials={portTrials} onUpsert={handleUpsertPT} onRemove={removePT} search={search}/>}
         {tab === 4 && <PortCallsignsTab portCS={portCS} onUpsert={handleUpsertCS} onRemove={removeCS} search={search}/>}
         {tab === 6 && <AuditLogTab search={search}/>}
+        {tab === 7 && <BackupsPanel backup={backup} data={backupData}/>}
+        {tab === 8 && isAdmin && <UserManagementTab auth={auth}/>}
+        {tab === 8 && !isAdmin && (
+          <div style={{padding:32,textAlign:'center',color:T.muted,fontSize:13}}>
+            Administrator access required.
+          </div>
+)}
         {tab === 5 && <FTOTab ftoOfficers={ftoOfficers} onUpsert={upsertFTO}
           onRemove={id=>{const f=ftoOfficers.find(x=>x.id===id);if(f&&f.isPrevious!=='Y')archiveFTO(f);else removeFTO(id);}}
           onCheckAndAdd={checkAndAddFTO}
