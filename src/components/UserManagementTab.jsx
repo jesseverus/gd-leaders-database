@@ -195,27 +195,26 @@ export function UserManagementTab({ auth }) {
               </div>
             </div>
 
-            {/* Actions — can't modify own account role, can't revoke yourself */}
-            {u.id !== session?.userId && (
-              <div style={{display:'flex',gap:6,flexShrink:0}}>
-                <button onClick={()=>{ setEditUser(u); setEditForm({}); }}
-                  style={{background:'none',border:`1px solid ${T.border}`,borderRadius:4,
-                    color:T.hint,fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
-                  Edit
-                </button>
-                {u.is_active
-                  ? <button onClick={()=>handleRevoke(u)}
-                      style={{background:'none',border:'1px solid #7f1d1d',borderRadius:4,
-                        color:'#ef4444',fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
-                      Revoke
-                    </button>
-                  : <button onClick={()=>handleRestore(u)}
-                      style={{background:'none',border:'1px solid #14532d',borderRadius:4,
-                        color:'#22c55e',fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
-                      Restore
-                    </button>
-                }
-              </div>
+            {/* Edit always available; Revoke/Restore blocked for own account */}
+            <div style={{display:'flex',gap:6,flexShrink:0}}>
+              <button onClick={()=>{ setEditUser(u); setEditForm({}); }}
+                style={{background:'none',border:`1px solid ${T.border}`,borderRadius:4,
+                  color:T.hint,fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
+                Edit
+              </button>
+              {u.id !== session?.userId && (u.is_active
+                ? <button onClick={()=>handleRevoke(u)}
+                    style={{background:'none',border:'1px solid #7f1d1d',borderRadius:4,
+                      color:'#ef4444',fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
+                    Revoke
+                  </button>
+                : <button onClick={()=>handleRestore(u)}
+                    style={{background:'none',border:'1px solid #14532d',borderRadius:4,
+                      color:'#22c55e',fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
+                    Restore
+                  </button>
+              )}
+            </div>
             )}
           </div>
         ))}
